@@ -5,7 +5,7 @@
  * knowledge graph from any codebase.
  */
 
-import * as path from 'path';
+import * as path from "path";
 import {
   Node,
   Edge,
@@ -21,15 +21,15 @@ import {
   TaskContext,
   BuildContextOptions,
   FindRelevantContextOptions,
-} from './types';
-import { DatabaseConnection, getDatabasePath } from './db';
-import { QueryBuilder } from './db/queries';
+} from "./types";
+import { DatabaseConnection, getDatabasePath } from "./db";
+import { QueryBuilder } from "./db/queries";
 import {
   isInitialized,
   createDirectory,
   removeDirectory,
   validateDirectory,
-} from './directory';
+} from "./directory";
 import {
   ExtractionOrchestrator,
   IndexProgress,
@@ -37,29 +37,42 @@ import {
   SyncResult,
   extractFromSource,
   initGrammars,
-} from './extraction';
+} from "./extraction";
 import {
   ReferenceResolver,
   createResolver,
   ResolutionResult,
-} from './resolution';
-import { GraphTraverser, GraphQueryManager } from './graph';
-import { ContextBuilder, createContextBuilder } from './context';
-import { Mutex, FileLock } from './utils';
-import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
+} from "./resolution";
+import { GraphTraverser, GraphQueryManager } from "./graph";
+import { ContextBuilder, createContextBuilder } from "./context";
+import { Mutex, FileLock } from "./utils";
+import {
+  FileWatcher,
+  WatchOptions,
+  PendingFile,
+  LockUnavailableError,
+} from "./sync";
 
 // Re-export types for consumers
-export * from './types';
-export { getDatabasePath } from './db';
+export * from "./types";
+export { getDatabasePath } from "./db";
 export {
   getCodeGraphDir,
   isInitialized,
   findNearestCodeGraphRoot,
   CODEGRAPH_DIR,
-} from './directory';
-export { IndexProgress, IndexResult, SyncResult } from './extraction';
-export { detectLanguage, isLanguageSupported, isGrammarLoaded, getSupportedLanguages, initGrammars, loadGrammarsForLanguages, loadAllGrammars } from './extraction';
-export { ResolutionResult } from './resolution';
+} from "./directory";
+export { IndexProgress, IndexResult, SyncResult } from "./extraction";
+export {
+  detectLanguage,
+  isLanguageSupported,
+  isGrammarLoaded,
+  getSupportedLanguages,
+  initGrammars,
+  loadGrammarsForLanguages,
+  loadAllGrammars,
+} from "./extraction";
+export { ResolutionResult } from "./resolution";
 export {
   CodeGraphError,
   FileError,
@@ -73,10 +86,22 @@ export {
   getLogger,
   silentLogger,
   defaultLogger,
-} from './errors';
-export { Mutex, FileLock, processInBatches, debounce, throttle, MemoryMonitor } from './utils';
-export { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
-export { MCPServer } from './mcp';
+} from "./errors";
+export {
+  Mutex,
+  FileLock,
+  processInBatches,
+  debounce,
+  throttle,
+  MemoryMonitor,
+} from "./utils";
+export {
+  FileWatcher,
+  WatchOptions,
+  PendingFile,
+  LockUnavailableError,
+} from "./sync";
+export { MCPServer } from "./mcp";
 
 /**
  * Options for initializing a new CodeGraph project
@@ -141,13 +166,13 @@ export class CodeGraph {
   private constructor(
     db: DatabaseConnection,
     queries: QueryBuilder,
-    projectRoot: string
+    projectRoot: string,
   ) {
     this.db = db;
     this.queries = queries;
     this.projectRoot = projectRoot;
     this.fileLock = new FileLock(
-      path.join(projectRoot, '.codegraph', 'codegraph.lock')
+      path.join(projectRoot, ".codegraph", "codegraph.lock"),
     );
     this.orchestrator = new ExtractionOrchestrator(projectRoot, queries);
     this.resolver = createResolver(projectRoot, queries);
@@ -156,7 +181,7 @@ export class CodeGraph {
     this.contextBuilder = createContextBuilder(
       projectRoot,
       queries,
-      this.traverser
+      this.traverser,
     );
   }
 
@@ -173,7 +198,11 @@ export class CodeGraph {
    * @param options - Initialization options
    * @returns A new CodeGraph instance
    */
-  static async init(projectRoot: string, options: InitOptions = {}): Promise<CodeGraph> {
+  static async init(
+    projectRoot: string,
+    options: InitOptions = {},
+  ): Promise<CodeGraph> {
+    //TODO:初始化
     await initGrammars();
     const resolvedRoot = path.resolve(projectRoot);
 
@@ -229,19 +258,26 @@ export class CodeGraph {
    * @param options - Open options
    * @returns A CodeGraph instance
    */
-  static async open(projectRoot: string, options: OpenOptions = {}): Promise<CodeGraph> {
+  static async open(
+    projectRoot: string,
+    options: OpenOptions = {},
+  ): Promise<CodeGraph> {
     await initGrammars();
     const resolvedRoot = path.resolve(projectRoot);
 
     // Check if initialized
     if (!isInitialized(resolvedRoot)) {
-      throw new Error(`CodeGraph not initialized in ${resolvedRoot}. Run init() first.`);
+      throw new Error(
+        `CodeGraph not initialized in ${resolvedRoot}. Run init() first.`,
+      );
     }
 
     // Validate directory structure
     const validation = validateDirectory(resolvedRoot);
     if (!validation.valid) {
-      throw new Error(`Invalid CodeGraph directory: ${validation.errors.join(', ')}`);
+      throw new Error(
+        `Invalid CodeGraph directory: ${validation.errors.join(", ")}`,
+      );
     }
 
     // Open database
@@ -267,13 +303,17 @@ export class CodeGraph {
 
     // Check if initialized
     if (!isInitialized(resolvedRoot)) {
-      throw new Error(`CodeGraph not initialized in ${resolvedRoot}. Run init() first.`);
+      throw new Error(
+        `CodeGraph not initialized in ${resolvedRoot}. Run init() first.`,
+      );
     }
 
     // Validate directory structure
     const validation = validateDirectory(resolvedRoot);
     if (!validation.valid) {
-      throw new Error(`Invalid CodeGraph directory: ${validation.errors.join(', ')}`);
+      throw new Error(
+        `Invalid CodeGraph directory: ${validation.errors.join(", ")}`,
+      );
     }
 
     // Open database
@@ -322,11 +362,30 @@ export class CodeGraph {
       try {
         this.fileLock.acquire();
       } catch {
-        return { success: false, filesIndexed: 0, filesSkipped: 0, filesErrored: 0, nodesCreated: 0, edgesCreated: 0, errors: [{ message: 'Could not acquire file lock - another process may be indexing', severity: 'error' as const }], durationMs: 0 };
+        return {
+          success: false,
+          filesIndexed: 0,
+          filesSkipped: 0,
+          filesErrored: 0,
+          nodesCreated: 0,
+          edgesCreated: 0,
+          errors: [
+            {
+              message:
+                "Could not acquire file lock - another process may be indexing",
+              severity: "error" as const,
+            },
+          ],
+          durationMs: 0,
+        };
       }
       try {
         const before = this.queries.getNodeAndEdgeCount();
-        const result = await this.orchestrator.indexAll(options.onProgress, options.signal, options.verbose);
+        const result = await this.orchestrator.indexAll(
+          options.onProgress,
+          options.signal,
+          options.verbose,
+        );
 
         // Re-detect frameworks now that the index is populated. The resolver
         // is constructed with createResolver() before any files exist, so
@@ -348,14 +407,14 @@ export class CodeGraph {
           const unresolvedCount = this.queries.getUnresolvedReferencesCount();
 
           options.onProgress?.({
-            phase: 'resolving',
+            phase: "resolving",
             current: 0,
             total: unresolvedCount,
           });
 
           await this.resolveReferencesBatched((current, total) => {
             options.onProgress?.({
-              phase: 'resolving',
+              phase: "resolving",
               current,
               total,
             });
@@ -394,7 +453,22 @@ export class CodeGraph {
       try {
         this.fileLock.acquire();
       } catch {
-        return { success: false, filesIndexed: 0, filesSkipped: 0, filesErrored: 0, nodesCreated: 0, edgesCreated: 0, errors: [{ message: 'Could not acquire file lock - another process may be indexing', severity: 'error' as const }], durationMs: 0 };
+        return {
+          success: false,
+          filesIndexed: 0,
+          filesSkipped: 0,
+          filesErrored: 0,
+          nodesCreated: 0,
+          edgesCreated: 0,
+          errors: [
+            {
+              message:
+                "Could not acquire file lock - another process may be indexing",
+              severity: "error" as const,
+            },
+          ],
+          durationMs: 0,
+        };
       }
       try {
         return this.orchestrator.indexFiles(filePaths);
@@ -414,7 +488,14 @@ export class CodeGraph {
       try {
         this.fileLock.acquire();
       } catch {
-        return { filesChecked: 0, filesAdded: 0, filesModified: 0, filesRemoved: 0, nodesUpdated: 0, durationMs: 0 };
+        return {
+          filesChecked: 0,
+          filesAdded: 0,
+          filesModified: 0,
+          filesRemoved: 0,
+          nodesUpdated: 0,
+          durationMs: 0,
+        };
       }
       try {
         const result = await this.orchestrator.sync(options.onProgress);
@@ -431,34 +512,39 @@ export class CodeGraph {
         if (result.filesAdded > 0 || result.filesModified > 0) {
           if (result.changedFilePaths) {
             // Scope resolution to changed files (git fast path — bounded set)
-            const unresolvedRefs = this.queries.getUnresolvedReferencesByFiles(result.changedFilePaths);
+            const unresolvedRefs = this.queries.getUnresolvedReferencesByFiles(
+              result.changedFilePaths,
+            );
 
             options.onProgress?.({
-              phase: 'resolving',
+              phase: "resolving",
               current: 0,
               total: unresolvedRefs.length,
             });
 
-            this.resolver.resolveAndPersist(unresolvedRefs, (current, total) => {
-              options.onProgress?.({
-                phase: 'resolving',
-                current,
-                total,
-              });
-            });
+            this.resolver.resolveAndPersist(
+              unresolvedRefs,
+              (current, total) => {
+                options.onProgress?.({
+                  phase: "resolving",
+                  current,
+                  total,
+                });
+              },
+            );
           } else {
             // No git info — use batched resolution to avoid OOM
             const unresolvedCount = this.queries.getUnresolvedReferencesCount();
 
             options.onProgress?.({
-              phase: 'resolving',
+              phase: "resolving",
               current: 0,
               total: unresolvedCount,
             });
 
             await this.resolveReferencesBatched((current, total) => {
               options.onProgress?.({
-                phase: 'resolving',
+                phase: "resolving",
                 current,
                 total,
               });
@@ -467,7 +553,11 @@ export class CodeGraph {
         }
 
         // Refresh planner stats + checkpoint the WAL after bulk writes.
-        if (result.filesAdded > 0 || result.filesModified > 0 || result.filesRemoved > 0) {
+        if (
+          result.filesAdded > 0 ||
+          result.filesModified > 0 ||
+          result.filesRemoved > 0
+        ) {
           this.db.runMaintenance();
         }
 
@@ -513,10 +603,11 @@ export class CodeGraph {
         if (result.filesChecked === 0 && result.durationMs === 0) {
           throw new LockUnavailableError();
         }
-        const filesChanged = result.filesAdded + result.filesModified + result.filesRemoved;
+        const filesChanged =
+          result.filesAdded + result.filesModified + result.filesRemoved;
         return { filesChanged, durationMs: result.durationMs };
       },
-      options
+      options,
     );
 
     return this.watcher.start();
@@ -561,13 +652,19 @@ export class CodeGraph {
    * `getPendingFiles()`. Resolves immediately when no watcher is active.
    */
   waitUntilWatcherReady(timeoutMs?: number): Promise<void> {
-    return this.watcher ? this.watcher.waitUntilReady(timeoutMs) : Promise.resolve();
+    return this.watcher
+      ? this.watcher.waitUntilReady(timeoutMs)
+      : Promise.resolve();
   }
 
   /**
    * Get files that have changed since last index
    */
-  getChangedFiles(): { added: string[]; modified: string[]; removed: string[] } {
+  getChangedFiles(): {
+    added: string[];
+    modified: string[];
+    removed: string[];
+  } {
     return this.orchestrator.getChangedFiles();
   }
 
@@ -591,7 +688,9 @@ export class CodeGraph {
    * - Import-based resolution
    * - Name-based symbol matching
    */
-  resolveReferences(onProgress?: (current: number, total: number) => void): ResolutionResult {
+  resolveReferences(
+    onProgress?: (current: number, total: number) => void,
+  ): ResolutionResult {
     // Get all unresolved references from the database
     const unresolvedRefs = this.queries.getUnresolvedReferences();
     return this.resolver.resolveAndPersist(unresolvedRefs, onProgress);
@@ -601,7 +700,9 @@ export class CodeGraph {
    * Resolve references in batches to keep memory bounded on large codebases.
    * Processes chunks of unresolved refs, persisting results after each batch.
    */
-  async resolveReferencesBatched(onProgress?: (current: number, total: number) => void): Promise<ResolutionResult> {
+  async resolveReferencesBatched(
+    onProgress?: (current: number, total: number) => void,
+  ): Promise<ResolutionResult> {
     return this.resolver.resolveAndPersistBatched(onProgress);
   }
 
@@ -637,7 +738,7 @@ export class CodeGraph {
    * built-in real-SQLite module). Surfaced via `codegraph status` and the
    * `codegraph_status` MCP tool alongside the effective journal mode.
    */
-  getBackend(): import('./db').SqliteBackend {
+  getBackend(): import("./db").SqliteBackend {
     return this.db.getBackend();
   }
 
@@ -672,7 +773,7 @@ export class CodeGraph {
   /**
    * Get all nodes of a specific kind
    */
-  getNodesByKind(kind: Node['kind']): Node[] {
+  getNodesByKind(kind: Node["kind"]): Node[] {
     return this.queries.getNodesByKind(kind);
   }
 
@@ -691,7 +792,11 @@ export class CodeGraph {
    * (rails-realworld, laravel-realworld, drupal-admintoolbar, …) where
    * Glob+Read of `routes.rb`/`urls.py`/etc. otherwise beats codegraph.
    */
-  getTopRouteFile(): { filePath: string; routeCount: number; totalRoutes: number } | null {
+  getTopRouteFile(): {
+    filePath: string;
+    routeCount: number;
+    totalRoutes: number;
+  } | null {
     return this.queries.getTopRouteFile();
   }
 
@@ -702,7 +807,13 @@ export class CodeGraph {
    * null when fewer than 3 valid (non-test) routes exist.
    */
   getRoutingManifest(limit?: number): {
-    entries: Array<{ url: string; handler: string; handlerFile: string; handlerLine: number; handlerKind: string }>;
+    entries: Array<{
+      url: string;
+      handler: string;
+      handlerFile: string;
+      handlerLine: number;
+      handlerKind: string;
+    }>;
     topHandlerFile: string | null;
     topHandlerFileCount: number;
     totalRoutes: number;
@@ -825,7 +936,10 @@ export class CodeGraph {
    * @param maxDepth - Maximum depth to traverse (default: 1)
    * @returns Array of nodes that call this function
    */
-  getCallers(nodeId: string, maxDepth: number = 1): Array<{ node: Node; edge: Edge }> {
+  getCallers(
+    nodeId: string,
+    maxDepth: number = 1,
+  ): Array<{ node: Node; edge: Edge }> {
     return this.traverser.getCallers(nodeId, maxDepth);
   }
 
@@ -836,7 +950,10 @@ export class CodeGraph {
    * @param maxDepth - Maximum depth to traverse (default: 1)
    * @returns Array of nodes called by this function
    */
-  getCallees(nodeId: string, maxDepth: number = 1): Array<{ node: Node; edge: Edge }> {
+  getCallees(
+    nodeId: string,
+    maxDepth: number = 1,
+  ): Array<{ node: Node; edge: Edge }> {
     return this.traverser.getCallees(nodeId, maxDepth);
   }
 
@@ -864,7 +981,7 @@ export class CodeGraph {
   findPath(
     fromId: string,
     toId: string,
-    edgeKinds?: Edge['kind'][]
+    edgeKinds?: Edge["kind"][],
   ): Array<{ node: Node; edge: Edge | null }> | null {
     return this.traverser.findPath(fromId, toId, edgeKinds);
   }
@@ -924,7 +1041,7 @@ export class CodeGraph {
    * @param kinds - Node kinds to check (default: functions, methods, classes)
    * @returns Array of unreferenced nodes
    */
-  findDeadCode(kinds?: Node['kind'][]): Node[] {
+  findDeadCode(kinds?: Node["kind"][]): Node[] {
     return this.graphManager.findDeadCode(kinds);
   }
 
@@ -973,7 +1090,7 @@ export class CodeGraph {
    */
   async findRelevantContext(
     query: string,
-    options?: FindRelevantContextOptions
+    options?: FindRelevantContextOptions,
   ): Promise<Subgraph> {
     return this.contextBuilder.findRelevantContext(query, options);
   }
@@ -993,7 +1110,7 @@ export class CodeGraph {
    */
   async buildContext(
     input: TaskInput,
-    options?: BuildContextOptions
+    options?: BuildContextOptions,
   ): Promise<TaskContext | string> {
     return this.contextBuilder.buildContext(input, options);
   }

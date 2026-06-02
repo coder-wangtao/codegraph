@@ -29,8 +29,8 @@
  * ```
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from "fs";
+import * as path from "path";
 
 // ============================================================
 // SECURITY UTILITIES
@@ -41,9 +41,24 @@ import * as path from 'path';
  * Checked on all platforms; non-applicable paths are harmlessly skipped.
  */
 const SENSITIVE_PATHS = new Set([
-  '/', '/etc', '/usr', '/bin', '/sbin', '/var', '/tmp', '/dev', '/proc', '/sys',
-  '/root', '/boot', '/lib', '/lib64', '/opt',
-  'c:\\', 'c:\\windows', 'c:\\windows\\system32',
+  "/",
+  "/etc",
+  "/usr",
+  "/bin",
+  "/sbin",
+  "/var",
+  "/tmp",
+  "/dev",
+  "/proc",
+  "/sys",
+  "/root",
+  "/boot",
+  "/lib",
+  "/lib64",
+  "/opt",
+  "c:\\",
+  "c:\\windows",
+  "c:\\windows\\system32",
 ]);
 
 /**
@@ -54,11 +69,17 @@ const SENSITIVE_PATHS = new Set([
  * @param filePath - The relative file path to validate
  * @returns The resolved absolute path, or null if it escapes the root
  */
-export function validatePathWithinRoot(projectRoot: string, filePath: string): string | null {
+export function validatePathWithinRoot(
+  projectRoot: string,
+  filePath: string,
+): string | null {
   const resolved = path.resolve(projectRoot, filePath);
   const normalizedRoot = path.resolve(projectRoot);
 
-  if (!resolved.startsWith(normalizedRoot + path.sep) && resolved !== normalizedRoot) {
+  if (
+    !resolved.startsWith(normalizedRoot + path.sep) &&
+    resolved !== normalizedRoot
+  ) {
     return null;
   }
   return resolved;
@@ -78,16 +99,22 @@ export function validateProjectPath(dirPath: string): string | null {
   const resolved = path.resolve(dirPath);
 
   // Block sensitive system directories
-  if (SENSITIVE_PATHS.has(resolved) || SENSITIVE_PATHS.has(resolved.toLowerCase())) {
+  if (
+    SENSITIVE_PATHS.has(resolved) ||
+    SENSITIVE_PATHS.has(resolved.toLowerCase())
+  ) {
     return `Refusing to operate on sensitive system directory: ${resolved}`;
   }
 
   // Also block common sensitive home subdirectories
-  const homeDir = require('os').homedir();
-  const sensitiveHomeDirs = ['.ssh', '.gnupg', '.aws', '.config'];
+  const homeDir = require("os").homedir();
+  const sensitiveHomeDirs = [".ssh", ".gnupg", ".aws", ".config"];
   for (const dir of sensitiveHomeDirs) {
     const sensitivePath = path.join(homeDir, dir);
-    if (resolved === sensitivePath || resolved.startsWith(sensitivePath + path.sep)) {
+    if (
+      resolved === sensitivePath ||
+      resolved.startsWith(sensitivePath + path.sep)
+    ) {
       return `Refusing to operate on sensitive directory: ${resolved}`;
     }
   }
@@ -119,7 +146,10 @@ export function validateProjectPath(dirPath: string): string | null {
 export function isPathWithinRoot(filePath: string, rootDir: string): boolean {
   const resolvedPath = path.resolve(rootDir, filePath);
   const resolvedRoot = path.resolve(rootDir);
-  return resolvedPath.startsWith(resolvedRoot + path.sep) || resolvedPath === resolvedRoot;
+  return (
+    resolvedPath.startsWith(resolvedRoot + path.sep) ||
+    resolvedPath === resolvedRoot
+  );
 }
 
 /**
@@ -129,7 +159,10 @@ export function isPathWithinRoot(filePath: string, rootDir: string): boolean {
  * root but the real path on disk points elsewhere. Falls back to logical
  * path checking if realpath resolution fails (e.g. broken symlink).
  */
-export function isPathWithinRootReal(filePath: string, rootDir: string): boolean {
+export function isPathWithinRootReal(
+  filePath: string,
+  rootDir: string,
+): boolean {
   // First do the cheap logical check
   if (!isPathWithinRoot(filePath, rootDir)) {
     return false;
@@ -171,7 +204,7 @@ export function clamp(value: number, min: number, max: number): number {
  * Fixes Windows backslash paths so glob matching works consistently.
  */
 export function normalizePath(filePath: string): string {
-  return filePath.replace(/\\/g, '/');
+  return filePath.replace(/\\/g, "/");
 }
 
 /**
@@ -198,40 +231,48 @@ export class FileLock {
     // Check for existing lock
     if (fs.existsSync(this.lockPath)) {
       try {
-        const content = fs.readFileSync(this.lockPath, 'utf-8').trim();
+        const content = fs.readFileSync(this.lockPath, "utf-8").trim();
         const pid = parseInt(content, 10);
         const stat = fs.statSync(this.lockPath);
         const lockAge = Date.now() - stat.mtimeMs;
 
         // Treat locks older than the timeout as stale, regardless of PID
-        if (lockAge < FileLock.STALE_TIMEOUT_MS && !isNaN(pid) && this.isProcessAlive(pid)) {
+        if (
+          lockAge < FileLock.STALE_TIMEOUT_MS &&
+          !isNaN(pid) &&
+          this.isProcessAlive(pid)
+        ) {
           throw new Error(
             `CodeGraph database is locked by another process (PID ${pid}). ` +
-            `If this is stale, run 'codegraph unlock' or delete ${this.lockPath}`
+              `If this is stale, run 'codegraph unlock' or delete ${this.lockPath}`,
           );
         }
 
         // Stale lock (dead process or timed out) - remove it
         fs.unlinkSync(this.lockPath);
       } catch (err) {
-        if (err instanceof Error && err.message.includes('locked by another')) {
+        if (err instanceof Error && err.message.includes("locked by another")) {
           throw err;
         }
         // Other errors reading lock file - try to remove it
-        try { fs.unlinkSync(this.lockPath); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(this.lockPath);
+        } catch {
+          /* ignore */
+        }
       }
     }
 
     // Write our PID to the lock file using exclusive create flag
     try {
-      fs.writeFileSync(this.lockPath, String(process.pid), { flag: 'wx' });
+      fs.writeFileSync(this.lockPath, String(process.pid), { flag: "wx" });
       this.held = true;
     } catch (err: any) {
-      if (err.code === 'EEXIST') {
+      if (err.code === "EEXIST") {
         // Race condition: another process grabbed the lock between our check and write
         throw new Error(
-          'CodeGraph database is locked by another process. ' +
-          `If this is stale, run 'codegraph unlock' or delete ${this.lockPath}`
+          "CodeGraph database is locked by another process. " +
+            `If this is stale, run 'codegraph unlock' or delete ${this.lockPath}`,
         );
       }
       throw err;
@@ -245,7 +286,7 @@ export class FileLock {
     if (!this.held) return;
     try {
       // Only remove if we still own it (check PID)
-      const content = fs.readFileSync(this.lockPath, 'utf-8').trim();
+      const content = fs.readFileSync(this.lockPath, "utf-8").trim();
       if (parseInt(content, 10) === process.pid) {
         fs.unlinkSync(this.lockPath);
       }
@@ -305,14 +346,14 @@ export async function processInBatches<T, R>(
   items: T[],
   batchSize: number,
   processor: (item: T, index: number) => Promise<R>,
-  onBatchComplete?: (completed: number, total: number) => void
+  onBatchComplete?: (completed: number, total: number) => void,
 ): Promise<R[]> {
   const results: R[] = [];
 
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, Math.min(i + batchSize, items.length));
     const batchResults = await Promise.all(
-      batch.map((item, idx) => processor(item, i + idx))
+      batch.map((item, idx) => processor(item, i + idx)),
     );
     results.push(...batchResults);
 
@@ -386,17 +427,17 @@ export class Mutex {
  */
 export async function* readFileInChunks(
   filePath: string,
-  chunkSize: number = 64 * 1024
+  chunkSize: number = 64 * 1024,
 ): AsyncGenerator<string, void, undefined> {
-  const fs = await import('fs');
+  const fs = await import("fs");
 
-  const fd = fs.openSync(filePath, 'r');
+  const fd = fs.openSync(filePath, "r");
   const buffer = Buffer.alloc(chunkSize);
 
   try {
     let bytesRead: number;
     while ((bytesRead = fs.readSync(fd, buffer, 0, chunkSize, null)) > 0) {
-      yield buffer.toString('utf-8', 0, bytesRead);
+      yield buffer.toString("utf-8", 0, bytesRead);
     }
   } finally {
     fs.closeSync(fd);
@@ -412,7 +453,7 @@ export async function* readFileInChunks(
  */
 export function debounce<T extends (...args: unknown[]) => unknown>(
   fn: T,
-  delay: number
+  delay: number,
 ): (...args: Parameters<T>) => void {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -436,7 +477,7 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
  */
 export function throttle<T extends (...args: unknown[]) => unknown>(
   fn: T,
-  limit: number
+  limit: number,
 ): (...args: Parameters<T>) => void {
   let lastCall = 0;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -477,13 +518,13 @@ export function estimateSize(obj: unknown): number {
     }
 
     switch (typeof value) {
-      case 'boolean':
+      case "boolean":
         return 4;
-      case 'number':
+      case "number":
         return 8;
-      case 'string':
+      case "string":
         return 2 * (value as string).length;
-      case 'object':
+      case "object":
         if (seen.has(value as object)) {
           return 0;
         }
@@ -495,7 +536,7 @@ export function estimateSize(obj: unknown): number {
 
         return Object.entries(value as object).reduce(
           (acc, [key, val]) => acc + sizeOf(key) + sizeOf(val),
-          0
+          0,
         );
       default:
         return 0;
@@ -516,7 +557,7 @@ export class MemoryMonitor {
 
   constructor(
     thresholdMB: number = 500,
-    onThresholdExceeded?: (usage: number) => void
+    onThresholdExceeded?: (usage: number) => void,
   ) {
     this.threshold = thresholdMB * 1024 * 1024;
     this.onThresholdExceeded = onThresholdExceeded;

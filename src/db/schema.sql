@@ -2,10 +2,11 @@
 -- Version 1
 
 -- Schema version tracking
+-- 数据库版本管理
 CREATE TABLE IF NOT EXISTS schema_versions (
-    version INTEGER PRIMARY KEY,
-    applied_at INTEGER NOT NULL,
-    description TEXT
+    version INTEGER PRIMARY KEY, --版本号
+    applied_at INTEGER NOT NULL,  -- 应用时间
+    description TEXT -- 描述
 );
 
 -- Insert initial version
@@ -17,41 +18,43 @@ VALUES (1, strftime('%s', 'now') * 1000, 'Initial schema');
 -- =============================================================================
 
 -- Nodes: Code symbols (functions, classes, variables, etc.)
+-- 把“代码中的符号（函数/类/变量等）”抽象成一张统一的结构化表 —— nodes
+
 CREATE TABLE IF NOT EXISTS nodes (
-    id TEXT PRIMARY KEY,
-    kind TEXT NOT NULL,
-    name TEXT NOT NULL,
-    qualified_name TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    language TEXT NOT NULL,
-    start_line INTEGER NOT NULL,
-    end_line INTEGER NOT NULL,
-    start_column INTEGER NOT NULL,
-    end_column INTEGER NOT NULL,
-    docstring TEXT,
-    signature TEXT,
-    visibility TEXT,
-    is_exported INTEGER DEFAULT 0,
-    is_async INTEGER DEFAULT 0,
-    is_static INTEGER DEFAULT 0,
-    is_abstract INTEGER DEFAULT 0,
-    decorators TEXT, -- JSON array
-    type_parameters TEXT, -- JSON array
-    updated_at INTEGER NOT NULL
+    id TEXT PRIMARY KEY,  --id 是唯一标识符
+    kind TEXT NOT NULL,  --kind 是类型 function class method variable interface
+    name TEXT NOT NULL, -- 短名称 getUser
+    qualified_name TEXT NOT NULL, -- 完整路径名（带作用域） api.user.getUser
+    file_path TEXT NOT NULL, -- 这个符号在哪个文件
+    language TEXT NOT NULL, -- 编程语言类型
+    start_line INTEGER NOT NULL, -- 行
+    end_line INTEGER NOT NULL,  -- 行
+    start_column INTEGER NOT NULL, -- 列
+    end_column INTEGER NOT NULL,  -- 列
+    docstring TEXT, -- 注释说明
+    signature TEXT, -- 函数签名 （function getUser(id: string): User）
+    visibility TEXT, -- 可见性 public private protected internal
+    is_exported INTEGER DEFAULT 0, -- 是否导出（JS/TS export）
+    is_async INTEGER DEFAULT 0, -- 是否 async 函数
+    is_static INTEGER DEFAULT 0, -- 是否 static 方法 
+    is_abstract INTEGER DEFAULT 0, -- 是否抽象方法（abstract class）
+    decorators TEXT, -- 装饰器（TypeScript / Python） ["@Component", "@Injectable"]
+    type_parameters TEXT, -- 泛型参数 ["T", "K"]
+    updated_at INTEGER NOT NULL -- 更新时间
 );
 
 -- Edges: Relationships between nodes
 CREATE TABLE IF NOT EXISTS edges (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source TEXT NOT NULL,
-    target TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    metadata TEXT, -- JSON object
-    line INTEGER,
-    col INTEGER,
-    provenance TEXT DEFAULT NULL,
-    FOREIGN KEY (source) REFERENCES nodes(id) ON DELETE CASCADE,
-    FOREIGN KEY (target) REFERENCES nodes(id) ON DELETE CASCADE
+    id INTEGER PRIMARY KEY AUTOINCREMENT,  -- 边的自增主键，每条关系一行
+    source TEXT NOT NULL,   -- 起点节点 ID，对应 nodes.id
+    target TEXT NOT NULL,   -- 终点节点 ID，对应 nodes.id
+    kind TEXT NOT NULL,  -- 关系类型 calls(A 调用了 B（查 callers/callees 就靠它）) contains(包含关系（文件 → 类 → 方法）)
+    metadata TEXT, -- 额外信息，JSON 字符串（如路由 URL、合成边的来源等）
+    line INTEGER,  -- 行 关系在源码中的位置（如调用发生在第几行）
+    col INTEGER,  -- 列 关系在源码中的位置（如调用发生在第几行）
+    provenance TEXT DEFAULT NULL,  -- 边是怎么来的：tree-sitter（AST 直接解析）、heuristic（启发式合成，如 React render 链）等
+    FOREIGN KEY (source) REFERENCES nodes(id) ON DELETE CASCADE,  -- 外键约束，删除起点节点时，删除这条边
+    FOREIGN KEY (target) REFERENCES nodes(id) ON DELETE CASCADE  -- 外键约束，删除终点节点时，删除这条边
 );
 
 -- Files: Tracked source files

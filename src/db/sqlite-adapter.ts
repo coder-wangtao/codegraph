@@ -29,7 +29,7 @@ export interface SqliteDatabase {
  * The active SQLite backend. Only one now (`node:sqlite`); kept as a named type
  * so `codegraph status` and the per-instance reporting have a stable shape.
  */
-export type SqliteBackend = 'node-sqlite';
+export type SqliteBackend = "node-sqlite";
 
 /**
  * Wraps Node's built-in `node:sqlite` (`DatabaseSync`) to match the
@@ -45,7 +45,7 @@ class NodeSqliteAdapter implements SqliteDatabase {
 
   constructor(dbPath: string) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { DatabaseSync } = require('node:sqlite');
+    const { DatabaseSync } = require("node:sqlite");
     this._db = new DatabaseSync(dbPath);
   }
 
@@ -60,6 +60,9 @@ class NodeSqliteAdapter implements SqliteDatabase {
     const stmt = this._db.prepare(sql);
     return {
       run(...params: any[]) {
+        //INSERT / UPDATE / DELETE
+        // const insert = db.prepare("INSERT INTO nodes (id, name) VALUES (?, ?)");
+        // insert.run("abc", "foo");  // changes: 1
         const r = stmt.run(...params);
         return {
           changes: Number(r?.changes ?? 0),
@@ -67,9 +70,15 @@ class NodeSqliteAdapter implements SqliteDatabase {
         };
       },
       get(...params: any[]) {
+        // 查一行
+        // const one = db.prepare("SELECT * FROM nodes WHERE id = ?");
+        // one.get("abc");                     // { id: "abc", name: "foo", ... }
         return stmt.get(...params);
       },
       all(...params: any[]) {
+        // 查多行
+        // const many = db.prepare("SELECT * FROM nodes LIMIT ?");
+        // many.all(10);                       // [{ ... }, { ... }, ...]
         return stmt.all(...params);
       },
     };
@@ -83,7 +92,7 @@ class NodeSqliteAdapter implements SqliteDatabase {
     const trimmed = str.trim();
     // Write pragma ("key = value"): node:sqlite is real SQLite, so every pragma
     // (WAL, mmap, synchronous, …) applies as-is.
-    if (trimmed.includes('=')) {
+    if (trimmed.includes("=")) {
       this._db.exec(`PRAGMA ${trimmed}`);
       return;
     }
@@ -91,20 +100,21 @@ class NodeSqliteAdapter implements SqliteDatabase {
     // `{ simple: true }` returns just the single column value, like better-sqlite3.
     const row = this._db.prepare(`PRAGMA ${trimmed}`).get();
     if (options?.simple) {
-      return row && typeof row === 'object' ? Object.values(row)[0] : row;
+      return row && typeof row === "object" ? Object.values(row)[0] : row;
     }
     return row;
   }
 
+  //事务
   transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T {
     return (...args: any[]) => {
-      this._db.exec('BEGIN');
+      this._db.exec("BEGIN");
       try {
         const result = fn(...args);
-        this._db.exec('COMMIT');
+        this._db.exec("COMMIT");
         return result;
       } catch (error) {
-        this._db.exec('ROLLBACK');
+        this._db.exec("ROLLBACK");
         throw error;
       }
     };
@@ -124,16 +134,19 @@ class NodeSqliteAdapter implements SqliteDatabase {
  * report it per-instance — MCP can open multiple project DBs in one process, so
  * a process-global would race.
  */
-export function createDatabase(dbPath: string): { db: SqliteDatabase; backend: SqliteBackend } {
+export function createDatabase(dbPath: string): {
+  db: SqliteDatabase;
+  backend: SqliteBackend;
+} {
   try {
-    return { db: new NodeSqliteAdapter(dbPath), backend: 'node-sqlite' };
+    return { db: new NodeSqliteAdapter(dbPath), backend: "node-sqlite" };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     throw new Error(
-      'Failed to open SQLite via the built-in node:sqlite module.\n' +
-      'CodeGraph requires node:sqlite (Node.js 22.5+). Install the self-contained\n' +
-      'CodeGraph release (it bundles a compatible Node), or run on Node 22.5+.\n' +
-      `Underlying error: ${msg}`
+      "Failed to open SQLite via the built-in node:sqlite module.\n" +
+        "CodeGraph requires node:sqlite (Node.js 22.5+). Install the self-contained\n" +
+        "CodeGraph release (it bundles a compatible Node), or run on Node 22.5+.\n" +
+        `Underlying error: ${msg}`,
     );
   }
 }
