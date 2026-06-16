@@ -8,19 +8,23 @@
  * shape onto everyone.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * The MCP-server config block codegraph injects. Same shape across
  * all JSON-shaped agent configs (Claude, Cursor, opencode), only the
  * surrounding wrapper differs. Codex (TOML) builds its own block.
  */
-export function getMcpServerConfig(): { type: string; command: string; args: string[] } {
+export function getMcpServerConfig(): {
+  type: string;
+  command: string;
+  args: string[];
+} {
   return {
-    type: 'stdio',
-    command: 'codegraph',
-    args: ['serve', '--mcp'],
+    type: "stdio",
+    command: "codegraph",
+    args: ["serve", "--mcp"],
   };
 }
 
@@ -31,13 +35,13 @@ export function getMcpServerConfig(): { type: string; command: string; args: str
  */
 export function getCodeGraphPermissions(): string[] {
   return [
-    'mcp__codegraph__codegraph_search',
-    'mcp__codegraph__codegraph_context',
-    'mcp__codegraph__codegraph_callers',
-    'mcp__codegraph__codegraph_callees',
-    'mcp__codegraph__codegraph_impact',
-    'mcp__codegraph__codegraph_node',
-    'mcp__codegraph__codegraph_status',
+    "mcp__codegraph__codegraph_search",
+    "mcp__codegraph__codegraph_context",
+    "mcp__codegraph__codegraph_callers",
+    "mcp__codegraph__codegraph_callees",
+    "mcp__codegraph__codegraph_impact",
+    "mcp__codegraph__codegraph_node",
+    "mcp__codegraph__codegraph_status",
   ];
 }
 
@@ -53,14 +57,18 @@ export function readJsonFile(filePath: string): Record<string, any> {
     return {};
   }
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`  Warning: Could not parse ${path.basename(filePath)}: ${msg}`);
+    console.warn(
+      `  Warning: Could not parse ${path.basename(filePath)}: ${msg}`,
+    );
     console.warn(`  A backup will be created before overwriting.`);
     try {
-      fs.copyFileSync(filePath, filePath + '.backup');
-    } catch { /* ignore backup failure */ }
+      fs.copyFileSync(filePath, filePath + ".backup");
+    } catch {
+      /* ignore backup failure */
+    }
     return {};
   }
 }
@@ -76,12 +84,16 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  const tmpPath = filePath + '.tmp.' + process.pid;
+  const tmpPath = filePath + ".tmp." + process.pid;
   try {
     fs.writeFileSync(tmpPath, content);
     fs.renameSync(tmpPath, filePath);
   } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      /* ignore */
+    }
     throw err;
   }
 }
@@ -90,8 +102,11 @@ export function atomicWriteFileSync(filePath: string, content: string): void {
  * Atomic JSON write. Trailing newline matches the convention every
  * existing target had — preserves diff-friendly file shape.
  */
-export function writeJsonFile(filePath: string, data: Record<string, any>): void {
-  atomicWriteFileSync(filePath, JSON.stringify(data, null, 2) + '\n');
+export function writeJsonFile(
+  filePath: string,
+  data: Record<string, any>,
+): void {
+  atomicWriteFileSync(filePath, JSON.stringify(data, null, 2) + "\n");
 }
 
 /**
@@ -101,11 +116,12 @@ export function writeJsonFile(filePath: string, data: Record<string, any>): void
  * matches what we'd write, return action=`unchanged` instead of
  * re-writing (and emitting a confusing "Updated" log line).
  */
+//TODO:幂等检查
 export function jsonDeepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== typeof b) return false;
   if (a === null || b === null) return a === b;
-  if (typeof a !== 'object') return false;
+  if (typeof a !== "object") return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false;
@@ -137,33 +153,36 @@ export function replaceOrAppendMarkedSection(
   body: string,
   startMarker: string,
   endMarker: string,
-): 'created' | 'updated' | 'appended' | 'unchanged' {
+): "created" | "updated" | "appended" | "unchanged" {
   if (!fs.existsSync(filePath)) {
-    atomicWriteFileSync(filePath, body + '\n');
-    return 'created';
+    atomicWriteFileSync(filePath, body + "\n");
+    return "created";
   }
 
-  const content = fs.readFileSync(filePath, 'utf-8');
+  const content = fs.readFileSync(filePath, "utf-8");
   const startIdx = content.indexOf(startMarker);
   const endIdx = content.indexOf(endMarker);
 
   if (startIdx !== -1 && endIdx > startIdx) {
-    const existingBlock = content.substring(startIdx, endIdx + endMarker.length);
+    const existingBlock = content.substring(
+      startIdx,
+      endIdx + endMarker.length,
+    );
     if (existingBlock === body) {
-      return 'unchanged';
+      return "unchanged";
     }
     const before = content.substring(0, startIdx);
     const after = content.substring(endIdx + endMarker.length);
     atomicWriteFileSync(filePath, before + body + after);
-    return 'updated';
+    return "updated";
   }
 
   // No markers — append. Preserve existing content with a separating
   // blank line.
   const trimmed = content.trimEnd();
-  const sep = trimmed.length > 0 ? '\n\n' : '';
-  atomicWriteFileSync(filePath, trimmed + sep + body + '\n');
-  return 'appended';
+  const sep = trimmed.length > 0 ? "\n\n" : "";
+  atomicWriteFileSync(filePath, trimmed + sep + body + "\n");
+  return "appended";
 }
 
 /**
@@ -179,28 +198,32 @@ export function removeMarkedSection(
   filePath: string,
   startMarker: string,
   endMarker: string,
-): 'removed' | 'not-found' | 'kept' {
-  if (!fs.existsSync(filePath)) return 'kept';
+): "removed" | "not-found" | "kept" {
+  if (!fs.existsSync(filePath)) return "kept";
 
   let content: string;
   try {
-    content = fs.readFileSync(filePath, 'utf-8');
+    content = fs.readFileSync(filePath, "utf-8");
   } catch {
-    return 'kept';
+    return "kept";
   }
 
   const startIdx = content.indexOf(startMarker);
   const endIdx = content.indexOf(endMarker);
-  if (startIdx === -1 || endIdx <= startIdx) return 'not-found';
+  if (startIdx === -1 || endIdx <= startIdx) return "not-found";
 
   const before = content.substring(0, startIdx).trimEnd();
   const after = content.substring(endIdx + endMarker.length).trimStart();
-  const joined = before + (before && after ? '\n\n' : '') + after;
+  const joined = before + (before && after ? "\n\n" : "") + after;
 
-  if (joined.trim() === '') {
-    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+  if (joined.trim() === "") {
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      /* ignore */
+    }
   } else {
-    atomicWriteFileSync(filePath, joined.trim() + '\n');
+    atomicWriteFileSync(filePath, joined.trim() + "\n");
   }
-  return 'removed';
+  return "removed";
 }

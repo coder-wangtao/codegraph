@@ -12,22 +12,26 @@
  * `--print-config` CLI flags.
  */
 
-import { execSync } from 'child_process';
-import * as path from 'path';
-import * as fs from 'fs';
+import { execSync } from "child_process";
+import * as path from "path";
+import * as fs from "fs";
 import {
   ALL_TARGETS,
   detectAll,
   getTarget,
   resolveTargetFlag,
-} from './targets/registry';
-import type { AgentTarget, Location, TargetId } from './targets/types';
-import { getGlyphs } from '../ui/glyphs';
+} from "./targets/registry";
+import type { AgentTarget, Location, TargetId } from "./targets/types";
+import { getGlyphs } from "../ui/glyphs";
 // Import the lightweight submodules directly (not the ../sync barrel, which
 // re-exports FileWatcher and would transitively pull in ../extraction — the
 // installer must stay importable even when native modules can't load).
-import { watchDisabledReason } from '../sync/watch-policy';
-import { isGitRepo, isSyncHookInstalled, installGitSyncHook } from '../sync/git-hooks';
+import { watchDisabledReason } from "../sync/watch-policy";
+import {
+  isGitRepo,
+  isSyncHookInstalled,
+  installGitSyncHook,
+} from "../sync/git-hooks";
 
 // Backwards-compat: keep these named exports — downstream code may
 // import them. The shim in `config-writer.ts` continues to re-export
@@ -37,14 +41,15 @@ export {
   writePermissions,
   hasMcpConfig,
   hasPermissions,
-} from './config-writer';
-export type { InstallLocation } from './config-writer';
+} from "./config-writer";
+export type { InstallLocation } from "./config-writer";
 
 // Dynamic import helper — tsc compiles import() to require() in CJS mode,
 // which fails for ESM-only packages. This bypasses the transformation.
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
-const importESM = new Function('specifier', 'return import(specifier)') as
-  (specifier: string) => Promise<typeof import('@clack/prompts')>;
+const importESM = new Function("specifier", "return import(specifier)") as (
+  specifier: string,
+) => Promise<typeof import("@clack/prompts")>;
 
 function formatNumber(n: number): string {
   return n.toLocaleString();
@@ -52,11 +57,11 @@ function formatNumber(n: number): string {
 
 function getVersion(): string {
   try {
-    const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    const packageJsonPath = path.join(__dirname, "..", "..", "package.json");
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
     return packageJson.version;
   } catch {
-    return '0.0.0';
+    return "0.0.0";
   }
 }
 
@@ -83,8 +88,10 @@ export async function runInstaller(): Promise<void> {
   return runInstallerWithOptions({});
 }
 
-export async function runInstallerWithOptions(opts: RunInstallerOptions): Promise<void> {
-  const clack = await importESM('@clack/prompts');
+export async function runInstallerWithOptions(
+  opts: RunInstallerOptions,
+): Promise<void> {
+  const clack = await importESM("@clack/prompts");
 
   clack.intro(`CodeGraph v${getVersion()}`);
 
@@ -95,10 +102,15 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   // they're committing to before we touch npm or disk. Detection
   // probes the user-provided location if known, else 'global' as the
   // most common default — labels are a hint, not load-bearing.
-  const detectionLocation: Location = opts.location ?? 'global';
-  const targets = await resolveTargets(clack, opts, detectionLocation, useDefaults);
+  const detectionLocation: Location = opts.location ?? "global";
+  const targets = await resolveTargets(
+    clack,
+    opts,
+    detectionLocation,
+    useDefaults,
+  );
   if (targets.length === 0) {
-    clack.outro('No agent targets selected — nothing to do.');
+    clack.outro("No agent targets selected — nothing to do.");
     return;
   }
 
@@ -106,25 +118,31 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   // matches existing behavior). Skipped when --yes (assume present).
   if (!useDefaults) {
     const shouldInstallGlobally = await clack.confirm({
-      message: 'Install the codegraph CLI on your PATH? (Required so agents can launch the MCP server)',
+      message:
+        "Install the codegraph CLI on your PATH? (Required so agents can launch the MCP server)",
       initialValue: true,
     });
     if (clack.isCancel(shouldInstallGlobally)) {
-      clack.cancel('Installation cancelled.');
+      clack.cancel("Installation cancelled.");
       process.exit(0);
     }
     if (shouldInstallGlobally) {
       const s = clack.spinner();
-      s.start('Installing codegraph CLI...');
+      s.start("Installing codegraph CLI...");
       try {
-        execSync('npm install -g @colbymchenry/codegraph', { stdio: 'pipe', windowsHide: true });
-        s.stop('Installed codegraph CLI on PATH');
+        execSync("npm install -g @colbymchenry/codegraph", {
+          stdio: "pipe",
+          windowsHide: true,
+        });
+        s.stop("Installed codegraph CLI on PATH");
       } catch {
-        s.stop('Could not install (permission denied)');
-        clack.log.warn('Try: sudo npm install -g @colbymchenry/codegraph');
+        s.stop("Could not install (permission denied)");
+        clack.log.warn("Try: sudo npm install -g @colbymchenry/codegraph");
       }
     } else {
-      clack.log.info('Skipped CLI install — agents will not be able to launch the MCP server without it');
+      clack.log.info(
+        "Skipped CLI install — agents will not be able to launch the MCP server without it",
+      );
     }
   }
 
@@ -133,26 +151,36 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   if (opts.location) {
     location = opts.location;
   } else if (useDefaults) {
-    location = 'global';
+    location = "global";
   } else {
     // If every selected target is global-only (e.g. Codex), skip the
     // prompt and force user-wide — project-local would just produce
     // skip warnings.
-    const allGlobalOnly = targets.every((t) => !t.supportsLocation('local'));
+    const allGlobalOnly = targets.every((t) => !t.supportsLocation("local"));
     if (allGlobalOnly) {
-      location = 'global';
-      clack.log.info('Writing user-wide configs (selected agents have no project-local config).');
+      location = "global";
+      clack.log.info(
+        "Writing user-wide configs (selected agents have no project-local config).",
+      );
     } else {
       const sel = await clack.select({
-        message: 'Apply agent configs to all your projects, or just this one?',
+        message: "Apply agent configs to all your projects, or just this one?",
         options: [
-          { value: 'global' as const, label: 'All projects', hint: '~/.claude, ~/.cursor, etc.' },
-          { value: 'local'  as const, label: 'Just this project', hint: './.claude, ./.cursor, etc.' },
+          {
+            value: "global" as const,
+            label: "All projects",
+            hint: "~/.claude, ~/.cursor, etc.",
+          },
+          {
+            value: "local" as const,
+            label: "Just this project",
+            hint: "./.claude, ./.cursor, etc.",
+          },
         ],
-        initialValue: 'global' as const,
+        initialValue: "global" as const,
       });
       if (clack.isCancel(sel)) {
-        clack.cancel('Installation cancelled.');
+        clack.cancel("Installation cancelled.");
         process.exit(0);
       }
       location = sel;
@@ -166,13 +194,14 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     autoAllow = opts.autoAllow;
   } else if (useDefaults) {
     autoAllow = true;
-  } else if (targets.some((t) => t.id === 'claude')) {
+  } else if (targets.some((t) => t.id === "claude")) {
     const ans = await clack.confirm({
-      message: 'Auto-allow CodeGraph commands? (Skips permission prompts in Claude Code)',
+      message:
+        "Auto-allow CodeGraph commands? (Skips permission prompts in Claude Code)",
       initialValue: true,
     });
     if (clack.isCancel(ans)) {
-      clack.cancel('Installation cancelled.');
+      clack.cancel("Installation cancelled.");
       process.exit(0);
     }
     autoAllow = ans;
@@ -188,13 +217,17 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
       );
       continue;
     }
+    // 把mcp server的配置写入到各个模型中
     const result = target.install(location, { autoAllow });
     for (const file of result.files) {
-      const verb = file.action === 'unchanged'
-        ? 'Unchanged'
-        : file.action === 'created' ? 'Created'
-          : file.action === 'removed' ? 'Removed'
-            : 'Updated';
+      const verb =
+        file.action === "unchanged"
+          ? "Unchanged"
+          : file.action === "created"
+            ? "Created"
+            : file.action === "removed"
+              ? "Removed"
+              : "Updated";
       clack.log.success(`${target.displayName}: ${verb} ${tildify(file.path)}`);
     }
     for (const note of result.notes ?? []) {
@@ -203,17 +236,18 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   }
 
   // Step 6: for local install, initialize the project.
-  if (location === 'local') {
+  if (location === "local") {
     await initializeLocalProject(clack, useDefaults);
   }
 
-  if (location === 'global') {
-    clack.note('cd your-project\ncodegraph init -i', 'Quick start');
+  if (location === "global") {
+    clack.note("cd your-project\ncodegraph init -i", "Quick start");
   }
 
-  const finalNote = targets.length > 0
-    ? `Done! Restart your agent${targets.length > 1 ? 's' : ''} to use CodeGraph.`
-    : 'Done!';
+  const finalNote =
+    targets.length > 0
+      ? `Done! Restart your agent${targets.length > 1 ? "s" : ""} to use CodeGraph.`
+      : "Done!";
   clack.outro(finalNote);
 }
 
@@ -231,7 +265,7 @@ export interface RunUninstallerOptions {
   yes?: boolean;
 }
 
-export type UninstallStatus = 'removed' | 'not-configured' | 'unsupported';
+export type UninstallStatus = "removed" | "not-configured" | "unsupported";
 
 /**
  * Per-target outcome of an uninstall sweep. `removed` means we deleted
@@ -265,23 +299,26 @@ export function uninstallTargets(
 ): UninstallReport[] {
   return targets.map((target) => {
     if (!target.supportsLocation(location)) {
-      const only: Location = location === 'local' ? 'global' : 'local';
+      const only: Location = location === "local" ? "global" : "local";
       return {
         id: target.id,
         displayName: target.displayName,
-        status: 'unsupported' as const,
+        status: "unsupported" as const,
         removedPaths: [],
         notes: [`no ${location} config — this agent is ${only}-only`],
       };
     }
     const result = target.uninstall(location);
     const removedPaths = result.files
-      .filter((f) => f.action === 'removed')
+      .filter((f) => f.action === "removed")
       .map((f) => f.path);
     return {
       id: target.id,
       displayName: target.displayName,
-      status: removedPaths.length > 0 ? ('removed' as const) : ('not-configured' as const),
+      status:
+        removedPaths.length > 0
+          ? ("removed" as const)
+          : ("not-configured" as const),
       removedPaths,
       notes: result.notes ?? [],
     };
@@ -298,8 +335,10 @@ export function uninstallTargets(
  * block, permissions) — never the `.codegraph/` index, which `codegraph
  * uninit` owns.
  */
-export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
-  const clack = await importESM('@clack/prompts');
+export async function runUninstaller(
+  opts: RunUninstallerOptions,
+): Promise<void> {
+  const clack = await importESM("@clack/prompts");
 
   clack.intro(`CodeGraph v${getVersion()} — uninstall`);
 
@@ -312,18 +351,26 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
   if (opts.location) {
     location = opts.location;
   } else if (useDefaults) {
-    location = 'global';
+    location = "global";
   } else {
     const sel = await clack.select({
-      message: 'Remove CodeGraph from all your projects, or just this one?',
+      message: "Remove CodeGraph from all your projects, or just this one?",
       options: [
-        { value: 'global' as const, label: 'All projects (global)', hint: '~/.claude, ~/.cursor, ~/.codex, ~/.config/opencode, ~/.hermes, ~/.gemini, ~/.kiro' },
-        { value: 'local'  as const, label: 'Just this project (local)', hint: './.claude, ./.cursor, ./opencode.jsonc, ./.gemini, ./.kiro' },
+        {
+          value: "global" as const,
+          label: "All projects (global)",
+          hint: "~/.claude, ~/.cursor, ~/.codex, ~/.config/opencode, ~/.hermes, ~/.gemini, ~/.kiro",
+        },
+        {
+          value: "local" as const,
+          label: "Just this project (local)",
+          hint: "./.claude, ./.cursor, ./opencode.jsonc, ./.gemini, ./.kiro",
+        },
       ],
-      initialValue: 'global' as const,
+      initialValue: "global" as const,
     });
     if (clack.isCancel(sel)) {
-      clack.cancel('Uninstall cancelled.');
+      clack.cancel("Uninstall cancelled.");
       process.exit(0);
     }
     location = sel;
@@ -340,41 +387,50 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     targets = [...ALL_TARGETS];
   }
   if (targets.length === 0) {
-    clack.outro('No agent targets selected — nothing to do.');
+    clack.outro("No agent targets selected — nothing to do.");
     return;
   }
 
   // Step 3: sweep + per-agent feedback.
   const reports = uninstallTargets(targets, location);
-  const removed = reports.filter((r) => r.status === 'removed');
+  const removed = reports.filter((r) => r.status === "removed");
 
   for (const r of reports) {
-    if (r.status === 'removed') {
+    if (r.status === "removed") {
       for (const p of r.removedPaths) {
         clack.log.success(`${r.displayName}: removed ${tildify(p)}`);
       }
-    } else if (r.status === 'not-configured') {
+    } else if (r.status === "not-configured") {
       clack.log.info(`${r.displayName}: not configured — nothing to remove`);
     } else {
-      clack.log.info(`${r.displayName}: skipped — ${r.notes[0] ?? 'unsupported location'}`);
+      clack.log.info(
+        `${r.displayName}: skipped — ${r.notes[0] ?? "unsupported location"}`,
+      );
     }
   }
 
   // Step 4: for local uninstall, the index dir is separate — point at
   // `uninit` so the user knows it's still there (and how to remove it).
-  if (location === 'local' && fs.existsSync(path.join(process.cwd(), '.codegraph'))) {
-    clack.log.info('The .codegraph/ index for this project is still here. Run `codegraph uninit` to delete it.');
+  if (
+    location === "local" &&
+    fs.existsSync(path.join(process.cwd(), ".codegraph"))
+  ) {
+    clack.log.info(
+      "The .codegraph/ index for this project is still here. Run `codegraph uninit` to delete it.",
+    );
   }
 
   // Step 5: summary.
   if (removed.length > 0) {
-    const names = removed.map((r) => r.displayName).join(', ');
+    const names = removed.map((r) => r.displayName).join(", ");
     clack.outro(
-      `Removed CodeGraph from ${removed.length} agent${removed.length > 1 ? 's' : ''}: ${names}. ` +
-      `Restart ${removed.length > 1 ? 'them' : 'it'} to apply.`,
+      `Removed CodeGraph from ${removed.length} agent${removed.length > 1 ? "s" : ""}: ${names}. ` +
+        `Restart ${removed.length > 1 ? "them" : "it"} to apply.`,
     );
   } else {
-    clack.outro(`CodeGraph was not configured in any ${location} agent — nothing to remove.`);
+    clack.outro(
+      `CodeGraph was not configured in any ${location} agent — nothing to remove.`,
+    );
   }
 }
 
@@ -383,13 +439,13 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
  * lines. Pure cosmetic.
  */
 function tildify(p: string): string {
-  const home = require('os').homedir();
-  if (p.startsWith(home + path.sep)) return '~' + p.substring(home.length);
+  const home = require("os").homedir();
+  if (p.startsWith(home + path.sep)) return "~" + p.substring(home.length);
   return p;
 }
 
 async function resolveTargets(
-  clack: typeof import('@clack/prompts'),
+  clack: typeof import("@clack/prompts"),
   opts: RunInstallerOptions,
   location: Location,
   useDefaults: boolean,
@@ -401,7 +457,7 @@ async function resolveTargets(
 
   // --yes implies auto-detect.
   if (useDefaults) {
-    return resolveTargetFlag('auto', location);
+    return resolveTargetFlag("auto", location);
   }
 
   // Interactive multi-select.
@@ -411,14 +467,14 @@ async function resolveTargets(
     .map(({ target }) => target.id);
   // If nothing detected, default to Claude alone (matches the
   // historical default and the smallest-surprise outcome).
-  const initial = initialValues.length > 0 ? initialValues : ['claude'];
+  const initial = initialValues.length > 0 ? initialValues : ["claude"];
 
   const choice = await clack.multiselect<string>({
-    message: 'Which agents should CodeGraph configure?',
+    message: "Which agents should CodeGraph configure?",
     options: ALL_TARGETS.map((t) => {
       const det = detected.find(({ target }) => target.id === t.id)!.detection;
-      const flag = det.installed ? '(detected)' : '(not found)';
-      const globalOnly = !t.supportsLocation('local') ? ' — global only' : '';
+      const flag = det.installed ? "(detected)" : "(not found)";
+      const globalOnly = !t.supportsLocation("local") ? " — global only" : "";
       return {
         value: t.id,
         label: `${t.displayName} ${flag}${globalOnly}`,
@@ -429,7 +485,7 @@ async function resolveTargets(
   });
 
   if (clack.isCancel(choice)) {
-    clack.cancel('Installation cancelled.');
+    clack.cancel("Installation cancelled.");
     process.exit(0);
   }
 
@@ -444,34 +500,36 @@ async function resolveTargets(
  * offerWatchFallback). Agent-agnostic by nature.
  */
 async function initializeLocalProject(
-  clack: typeof import('@clack/prompts'),
+  clack: typeof import("@clack/prompts"),
   useDefaults = false,
 ): Promise<void> {
   const projectPath = process.cwd();
 
-  let CodeGraph: typeof import('../index').default;
+  let CodeGraph: typeof import("../index").default;
   try {
-    CodeGraph = (await import('../index')).default;
+    CodeGraph = (await import("../index")).default;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     clack.log.error(`Could not load native modules: ${msg}`);
-    clack.log.info('Skipping project initialization. Run "codegraph init -i" later.');
+    clack.log.info(
+      'Skipping project initialization. Run "codegraph init -i" later.',
+    );
     return;
   }
 
   // Check if already initialized
   if (CodeGraph.isInitialized(projectPath)) {
-    clack.log.info('CodeGraph already initialized in this project');
+    clack.log.info("CodeGraph already initialized in this project");
     await offerWatchFallback(clack, projectPath, { yes: useDefaults });
     return;
   }
 
   // Initialize
   const cg = await CodeGraph.init(projectPath);
-  clack.log.success('Created .codegraph/ directory');
+  clack.log.success("Created .codegraph/ directory");
 
   // Index the project with shimmer progress (worker thread for smooth animation)
-  const { createShimmerProgress } = await import('../ui/shimmer-progress');
+  const { createShimmerProgress } = await import("../ui/shimmer-progress");
   process.stdout.write(`\x1b[2m${getGlyphs().rail}\x1b[0m\n`);
   const progress = createShimmerProgress();
 
@@ -482,9 +540,13 @@ async function initializeLocalProject(
   await progress.stop();
 
   if (result.filesErrored > 0) {
-    clack.log.success(`Indexed ${formatNumber(result.filesIndexed)} files (${formatNumber(result.filesErrored)} failed, ${formatNumber(result.nodesCreated)} symbols)`);
+    clack.log.success(
+      `Indexed ${formatNumber(result.filesIndexed)} files (${formatNumber(result.filesErrored)} failed, ${formatNumber(result.nodesCreated)} symbols)`,
+    );
   } else {
-    clack.log.success(`Indexed ${formatNumber(result.filesIndexed)} files (${formatNumber(result.nodesCreated)} symbols)`);
+    clack.log.success(
+      `Indexed ${formatNumber(result.filesIndexed)} files (${formatNumber(result.nodesCreated)} symbols)`,
+    );
   }
 
   cg.close();
@@ -502,63 +564,82 @@ async function initializeLocalProject(
  * call unconditionally after init.
  */
 export async function offerWatchFallback(
-  clack: typeof import('@clack/prompts'),
+  clack: typeof import("@clack/prompts"),
   projectPath: string,
   opts: { yes?: boolean } = {},
 ): Promise<void> {
+  // watchDisabledReason 返回 null 表示可以正常 watch → 整函数直接退出，不打扰用户。
   const reason = watchDisabledReason(projectPath);
   if (!reason) return; // Watcher runs normally — nothing to set up.
 
   clack.log.warn(`Live file watching is disabled here — ${reason}.`);
-  clack.log.info('Until you re-sync, the CodeGraph index stays frozen — it will not pick up edits on its own.');
+  clack.log.info(
+    "Until you re-sync, the CodeGraph index stays frozen — it will not pick up edits on its own.",
+  );
 
   // No git repo → the commit-hook path doesn't apply; point at manual sync.
   if (!isGitRepo(projectPath)) {
-    clack.log.info('Run `codegraph sync` after changing files to refresh the index.');
+    clack.log.info(
+      "Run `codegraph sync` after changing files to refresh the index.",
+    );
     return;
   }
 
   // Already wired up on a previous run — confirm and move on without nagging.
   if (isSyncHookInstalled(projectPath)) {
-    clack.log.info('Git sync hooks are already installed — the index refreshes after commit / pull / checkout.');
+    clack.log.info(
+      "Git sync hooks are already installed — the index refreshes after commit / pull / checkout.",
+    );
     return;
   }
 
-  let choice: 'hook' | 'manual';
+  let choice: "hook" | "manual";
   if (opts.yes) {
-    choice = 'hook';
+    choice = "hook";
   } else {
     const sel = await clack.select({
-      message: 'How should CodeGraph keep its index fresh?',
+      message: "How should CodeGraph keep its index fresh?",
       options: [
-        { value: 'hook' as const, label: 'Sync on git commit / pull / checkout', hint: 'installs git hooks (recommended)' },
-        { value: 'manual' as const, label: 'I\'ll run `codegraph sync` myself', hint: 'fully manual' },
+        {
+          value: "hook" as const,
+          label: "Sync on git commit / pull / checkout",
+          hint: "installs git hooks (recommended)",
+        },
+        {
+          value: "manual" as const,
+          label: "I'll run `codegraph sync` myself",
+          hint: "fully manual",
+        },
       ],
-      initialValue: 'hook' as const,
+      initialValue: "hook" as const,
     });
     if (clack.isCancel(sel)) {
-      clack.log.info('Skipped — run `codegraph sync` after changes to refresh the index.');
+      clack.log.info(
+        "Skipped — run `codegraph sync` after changes to refresh the index.",
+      );
       return;
     }
     choice = sel;
   }
 
-  if (choice === 'manual') {
-    clack.log.info('Run `codegraph sync` after changing files to refresh the index.');
+  if (choice === "manual") {
+    clack.log.info(
+      "Run `codegraph sync` after changing files to refresh the index.",
+    );
     return;
   }
 
   const result = installGitSyncHook(projectPath);
   if (result.installed.length > 0) {
     clack.log.success(
-      `Installed git ${result.installed.join(', ')} hook${result.installed.length > 1 ? 's' : ''} — ` +
-      'the index refreshes in the background after each.',
+      `Installed git ${result.installed.join(", ")} hook${result.installed.length > 1 ? "s" : ""} — ` +
+        "the index refreshes in the background after each.",
     );
-    clack.log.info('Run `codegraph sync` anytime to refresh immediately.');
+    clack.log.info("Run `codegraph sync` anytime to refresh immediately.");
   } else {
     clack.log.warn(
-      `Could not install git hooks${result.skipped ? ` (${result.skipped})` : ''}. ` +
-      'Run `codegraph sync` after changes instead.',
+      `Could not install git hooks${result.skipped ? ` (${result.skipped})` : ""}. ` +
+        "Run `codegraph sync` after changes instead.",
     );
   }
 }

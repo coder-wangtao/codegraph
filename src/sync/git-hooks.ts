@@ -120,6 +120,20 @@ function chmodExecutable(file: string): void {
  * Idempotent: re-running replaces our marker block rather than duplicating
  * it, and any user-authored hook content is preserved.
  */
+
+/**
+ * 
+ *  #!/bin/sh
+    # 用户自己的 lint 脚本
+    npm run lint
+    # >>> codegraph sync hook >>>
+    if command -v codegraph >/dev/null 2>&1; then
+      ( codegraph sync >/dev/null 2>&1 & ) >/dev/null 2>&1
+    fi
+    # <<< codegraph sync hook <<<
+ *  
+ */
+
 export function installGitSyncHook(
   projectRoot: string,
   hooks: GitHookName[] = DEFAULT_SYNC_HOOKS,

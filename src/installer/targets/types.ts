@@ -11,15 +11,23 @@
  * runtime MCP server is already agent-agnostic; this brings the
  * installer to the same surface.
  */
-
-export type Location = 'global' | 'local';
+// global 用户级 local：项目级
+export type Location = "global" | "local";
 
 /**
  * Stable string id used in the `--target` CLI flag and the registry
  * lookup. New targets add a value here when they're added to the
  * registry. Keep these short and lowercase.
  */
-export type TargetId = 'claude' | 'cursor' | 'codex' | 'opencode' | 'hermes' | 'gemini' | 'antigravity' | 'kiro';
+export type TargetId =
+  | "claude"
+  | "cursor"
+  | "codex"
+  | "opencode"
+  | "hermes"
+  | "gemini"
+  | "antigravity"
+  | "kiro";
 
 /**
  * Result of `target.detect(location)`.
@@ -51,7 +59,13 @@ export interface DetectionResult {
 export interface WriteResult {
   files: Array<{
     path: string;
-    action: 'created' | 'updated' | 'unchanged' | 'removed' | 'not-found' | 'kept';
+    action:
+      | "created"
+      | "updated"
+      | "unchanged"
+      | "removed"
+      | "not-found"
+      | "kept";
   }>;
   /**
    * Optional one-line notes the orchestrator surfaces verbatim — e.g.

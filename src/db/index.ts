@@ -114,6 +114,7 @@ export class DatabaseConnection {
     const currentVersion = getCurrentVersion(db);
 
     if (currentVersion < CURRENT_SCHEMA_VERSION) {
+      //TODO:
       runMigrations(db, currentVersion);
     }
 
