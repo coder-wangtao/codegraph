@@ -4,31 +4,32 @@
  * Manages framework-specific resolvers.
  */
 
-import { FrameworkResolver, ResolutionContext } from '../types';
-import type { Language } from '../../types';
-import { drupalResolver } from './drupal';
-import { laravelResolver } from './laravel';
-import { expressResolver } from './express';
-import { nestjsResolver } from './nestjs';
-import { reactResolver } from './react';
-import { svelteResolver } from './svelte';
-import { vueResolver } from './vue';
-import { djangoResolver, flaskResolver, fastapiResolver } from './python';
-import { railsResolver } from './ruby';
-import { springResolver } from './java';
-import { playResolver } from './play';
-import { goResolver } from './go';
-import { rustResolver } from './rust';
-import { aspnetResolver } from './csharp';
-import { swiftUIResolver, uikitResolver, vaporResolver } from './swift';
-import { swiftObjcBridgeResolver } from './swift-objc';
-import { reactNativeBridgeResolver } from './react-native';
-import { expoModulesResolver } from './expo-modules';
-import { fabricViewResolver } from './fabric';
+import { FrameworkResolver, ResolutionContext } from "../types";
+import type { Language } from "../../types";
+import { drupalResolver } from "./drupal";
+import { laravelResolver } from "./laravel";
+import { expressResolver } from "./express";
+import { nestjsResolver } from "./nestjs";
+import { reactResolver } from "./react";
+import { svelteResolver } from "./svelte";
+import { vueResolver } from "./vue";
+import { djangoResolver, flaskResolver, fastapiResolver } from "./python";
+import { railsResolver } from "./ruby";
+import { springResolver } from "./java";
+import { playResolver } from "./play";
+import { goResolver } from "./go";
+import { rustResolver } from "./rust";
+import { aspnetResolver } from "./csharp";
+import { swiftUIResolver, uikitResolver, vaporResolver } from "./swift";
+import { swiftObjcBridgeResolver } from "./swift-objc";
+import { reactNativeBridgeResolver } from "./react-native";
+import { expoModulesResolver } from "./expo-modules";
+import { fabricViewResolver } from "./fabric";
 
 /**
  * All registered framework resolvers
  */
+// 所有注册的框架解析器
 const FRAMEWORK_RESOLVERS: FrameworkResolver[] = [
   // PHP
   laravelResolver,
@@ -78,14 +79,18 @@ export function getAllFrameworkResolvers(): FrameworkResolver[] {
 /**
  * Get a resolver by name
  */
-export function getFrameworkResolver(name: string): FrameworkResolver | undefined {
+export function getFrameworkResolver(
+  name: string,
+): FrameworkResolver | undefined {
   return FRAMEWORK_RESOLVERS.find((r) => r.name === name);
 }
 
 /**
  * Detect which frameworks are used in a project
  */
-export function detectFrameworks(context: ResolutionContext): FrameworkResolver[] {
+export function detectFrameworks(
+  context: ResolutionContext,
+): FrameworkResolver[] {
   return FRAMEWORK_RESOLVERS.filter((resolver) => {
     try {
       return resolver.detect(context);
@@ -101,10 +106,10 @@ export function detectFrameworks(context: ResolutionContext): FrameworkResolver[
  */
 export function getApplicableFrameworks(
   detected: FrameworkResolver[],
-  language: Language
+  language: Language,
 ): FrameworkResolver[] {
   return detected.filter(
-    (fw) => !fw.languages || fw.languages.includes(language)
+    (fw) => !fw.languages || fw.languages.includes(language),
   );
 }
 
@@ -121,22 +126,22 @@ export function registerFrameworkResolver(resolver: FrameworkResolver): void {
 }
 
 // Re-export framework resolvers
-export { drupalResolver } from './drupal';
-export { laravelResolver, FACADE_MAPPINGS } from './laravel';
-export { expressResolver } from './express';
-export { nestjsResolver } from './nestjs';
-export { reactResolver } from './react';
-export { svelteResolver } from './svelte';
-export { vueResolver } from './vue';
-export { djangoResolver, flaskResolver, fastapiResolver } from './python';
-export { railsResolver } from './ruby';
-export { springResolver } from './java';
-export { playResolver } from './play';
-export { goResolver } from './go';
-export { rustResolver } from './rust';
-export { aspnetResolver } from './csharp';
-export { swiftUIResolver, uikitResolver, vaporResolver } from './swift';
-export { swiftObjcBridgeResolver } from './swift-objc';
-export { reactNativeBridgeResolver } from './react-native';
-export { expoModulesResolver } from './expo-modules';
-export { fabricViewResolver } from './fabric';
+export { drupalResolver } from "./drupal";
+export { laravelResolver, FACADE_MAPPINGS } from "./laravel";
+export { expressResolver } from "./express";
+export { nestjsResolver } from "./nestjs";
+export { reactResolver } from "./react";
+export { svelteResolver } from "./svelte";
+export { vueResolver } from "./vue";
+export { djangoResolver, flaskResolver, fastapiResolver } from "./python";
+export { railsResolver } from "./ruby";
+export { springResolver } from "./java";
+export { playResolver } from "./play";
+export { goResolver } from "./go";
+export { rustResolver } from "./rust";
+export { aspnetResolver } from "./csharp";
+export { swiftUIResolver, uikitResolver, vaporResolver } from "./swift";
+export { swiftObjcBridgeResolver } from "./swift-objc";
+export { reactNativeBridgeResolver } from "./react-native";
+export { expoModulesResolver } from "./expo-modules";
+export { fabricViewResolver } from "./fabric";

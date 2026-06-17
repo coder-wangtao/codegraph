@@ -213,6 +213,23 @@ export function normalizePath(filePath: string): string {
  * Prevents multiple processes (e.g., git hooks, CLI, MCP server) from
  * writing to the same database simultaneously.
  */
+
+// 两个进程抢锁时发生了什么
+// 终端 A: codegraph index
+//   → acquire()
+//   → 无 lock 文件 → 创建 codegraph.lock，内容 "1234"（A 的 PID）
+//   → 索引中...
+// 终端 B: codegraph sync（同时）
+//   → acquire()
+//   → 读到 PID 1234，kill(1234, 0) 还活着
+//   → throw Error("locked by another process")
+//   → 索引被拒绝
+// 终端 A: 索引结束
+//   → release()
+//   → unlink codegraph.lock
+// 终端 B: 再跑一次 sync
+//   → acquire() 成功 ✓
+// 进程间锁
 export class FileLock {
   private lockPath: string;
   private held = false;
@@ -373,6 +390,7 @@ export async function processInBatches<T, R>(
 /**
  * Simple mutex lock for preventing concurrent operations
  */
+// 进程内锁
 export class Mutex {
   private locked = false;
   private waitQueue: Array<() => void> = [];
@@ -384,11 +402,13 @@ export class Mutex {
    */
   async acquire(): Promise<() => void> {
     while (this.locked) {
+      //若已上锁
       await new Promise<void>((resolve) => {
         this.waitQueue.push(resolve);
       });
     }
 
+    // 若未上锁
     this.locked = true;
 
     return () => {

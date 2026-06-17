@@ -102,6 +102,7 @@ if (nodeMajor < MIN_NODE_MAJOR) {
 relaunchWithWasmRuntimeFlagsIfNeeded(__filename);
 
 // Check if running with no arguments - run installer
+// 用户直接敲 codegraph => 走安装流程
 if (process.argv.length === 2) {
   import("../installer")
     .then(({ runInstaller }) => runInstaller())
@@ -114,6 +115,7 @@ if (process.argv.length === 2) {
     });
 } else {
   // Normal CLI flow
+  // codegraph install => 也可以走安装流程
   main();
 }
 

@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     start_column INTEGER NOT NULL, -- 列
     end_column INTEGER NOT NULL,  -- 列
     docstring TEXT, -- 注释说明
-    signature TEXT, -- 函数签名 （function getUser(id: string): User）
+    signature TEXT, -- 函数签名
     visibility TEXT, -- 可见性 public private protected internal
     is_exported INTEGER DEFAULT 0, -- 是否导出（JS/TS export）
     is_async INTEGER DEFAULT 0, -- 是否 async 函数
@@ -110,25 +110,30 @@ CREATE INDEX IF NOT EXISTS idx_nodes_lower_name ON nodes(lower(name));
 
 -- Full-text search index on node names, docstrings, and signatures
 -- 是 FTS5 的倒排索引虚拟表
+-- 写：nodes only     →  trigger  →  nodes_fts 自动更新
+-- 读：搜关键词       →  nodes_fts MATCH  →  JOIN nodes
+-- 读：已知 id/精确名 →  直接 SELECT nodes
 CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
     id,
     name,
     qualified_name,
     docstring,
     signature,
-    content='nodes',
-    content_rowid='rowid'
+    content='nodes',   -- 外部内容表
+    content_rowid='rowid'  -- 用 nodes.rowid 关联
 );
 
 -- Triggers to keep FTS index in sync
 -- 这些是 FTS 同步触发器：保证 nodes 表增删改时，
 -- nodes_fts 全文索引始终和主表一致。没有它们，搜索会漏结果或搜到已删/过时的符号。
-CREATE TRIGGER IF NOT EXISTS nodes_ai AFTER INSERT ON nodes BEGIN
+CREATE TRIGGER IF NOT EXISTS nodes_ai  -- 触发器名：nodes + ai (After Insert)
+AFTER INSERT ON nodes BEGIN -- 时机：nodes 表 INSERT 完成之后
     INSERT INTO nodes_fts(rowid, id, name, qualified_name, docstring, signature)
     VALUES (NEW.rowid, NEW.id, NEW.name, NEW.qualified_name, NEW.docstring, NEW.signature);
 END;
 
-CREATE TRIGGER IF NOT EXISTS nodes_ad AFTER DELETE ON nodes BEGIN
+CREATE TRIGGER IF NOT EXISTS nodes_ad --  After Delete
+ AFTER DELETE ON nodes BEGIN 
     INSERT INTO nodes_fts(nodes_fts, rowid, id, name, qualified_name, docstring, signature)
     VALUES ('delete', OLD.rowid, OLD.id, OLD.name, OLD.qualified_name, OLD.docstring, OLD.signature);
 END;
