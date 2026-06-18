@@ -321,7 +321,8 @@ function main() {
   /**
    * Print indexing results using clack log methods
    */
-  //把 CodeGraph 的索引执行结果“翻译成用户能理解的 CLI 输出”，并处理边界错误、错误分类、日志记录以及部分成功场景的用户体验优化。
+  //把 CodeGraph 的索引执行结果“翻译成用户能理解的 CLI 输出”，
+  // 并处理边界错误、错误分类、日志记录以及部分成功场景的用户体验优化。
   function printIndexResult(
     clack: typeof import("@clack/prompts"),
     result: IndexResult,
@@ -974,6 +975,7 @@ function main() {
           const cg = await CodeGraph.open(projectPath);
 
           const limit = parseInt(options.limit || "10", 10);
+          
           const rawResults = cg.searchNodes(search, {
             limit,
             kinds: options.kind ? [options.kind as any] : undefined,

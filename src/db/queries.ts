@@ -4,7 +4,7 @@
  * Prepared statements for CRUD operations on the knowledge graph.
  */
 
-import { SqliteDatabase, SqliteStatement } from './sqlite-adapter';
+import { SqliteDatabase, SqliteStatement } from "./sqlite-adapter";
 import {
   Node,
   Edge,
@@ -16,11 +16,15 @@ import {
   GraphStats,
   SearchOptions,
   SearchResult,
-} from '../types';
-import { safeJsonParse } from '../utils';
-import { kindBonus, nameMatchBonus, scorePathRelevance } from '../search/query-utils';
-import { parseQuery, boundedEditDistance } from '../search/query-parser';
-import { isGeneratedFile } from '../extraction/generated-detection';
+} from "../types";
+import { safeJsonParse } from "../utils";
+import {
+  kindBonus,
+  nameMatchBonus,
+  scorePathRelevance,
+} from "../search/query-utils";
+import { parseQuery, boundedEditDistance } from "../search/query-parser";
+import { isGeneratedFile } from "../extraction/generated-detection";
 
 /**
  * Path-only heuristic for files that should not be candidates for
@@ -126,13 +130,17 @@ function rowToNode(row: NodeRow): Node {
     endColumn: row.end_column,
     docstring: row.docstring ?? undefined,
     signature: row.signature ?? undefined,
-    visibility: row.visibility as Node['visibility'],
+    visibility: row.visibility as Node["visibility"],
     isExported: row.is_exported === 1,
     isAsync: row.is_async === 1,
     isStatic: row.is_static === 1,
     isAbstract: row.is_abstract === 1,
-    decorators: row.decorators ? safeJsonParse(row.decorators, undefined) : undefined,
-    typeParameters: row.type_parameters ? safeJsonParse(row.type_parameters, undefined) : undefined,
+    decorators: row.decorators
+      ? safeJsonParse(row.decorators, undefined)
+      : undefined,
+    typeParameters: row.type_parameters
+      ? safeJsonParse(row.type_parameters, undefined)
+      : undefined,
     updatedAt: row.updated_at,
   };
 }
@@ -148,7 +156,7 @@ function rowToEdge(row: EdgeRow): Edge {
     metadata: row.metadata ? safeJsonParse(row.metadata, undefined) : undefined,
     line: row.line ?? undefined,
     column: row.col ?? undefined,
-    provenance: row.provenance as Edge['provenance'],
+    provenance: row.provenance as Edge["provenance"],
   };
 }
 
@@ -244,8 +252,14 @@ export class QueryBuilder {
     }
 
     // Validate required fields to prevent SQLite bind errors
-    if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
-      console.error('[CodeGraph] Skipping node with missing required fields:', {
+    if (
+      !node.id ||
+      !node.kind ||
+      !node.name ||
+      !node.filePath ||
+      !node.language
+    ) {
+      console.error("[CodeGraph] Skipping node with missing required fields:", {
         id: node.id,
         kind: node.kind,
         name: node.name,
@@ -280,7 +294,9 @@ export class QueryBuilder {
       isStatic: node.isStatic ? 1 : 0,
       isAbstract: node.isAbstract ? 1 : 0,
       decorators: node.decorators ? JSON.stringify(node.decorators) : null,
-      typeParameters: node.typeParameters ? JSON.stringify(node.typeParameters) : null,
+      typeParameters: node.typeParameters
+        ? JSON.stringify(node.typeParameters)
+        : null,
       updatedAt: node.updatedAt ?? Date.now(),
     });
   }
@@ -330,8 +346,17 @@ export class QueryBuilder {
     this.nodeCache.delete(node.id);
 
     // Validate required fields
-    if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
-      console.error('[CodeGraph] Skipping node update with missing required fields:', node.id);
+    if (
+      !node.id ||
+      !node.kind ||
+      !node.name ||
+      !node.filePath ||
+      !node.language
+    ) {
+      console.error(
+        "[CodeGraph] Skipping node update with missing required fields:",
+        node.id,
+      );
       return;
     }
 
@@ -354,7 +379,9 @@ export class QueryBuilder {
       isStatic: node.isStatic ? 1 : 0,
       isAbstract: node.isAbstract ? 1 : 0,
       decorators: node.decorators ? JSON.stringify(node.decorators) : null,
-      typeParameters: node.typeParameters ? JSON.stringify(node.typeParameters) : null,
+      typeParameters: node.typeParameters
+        ? JSON.stringify(node.typeParameters)
+        : null,
       updatedAt: node.updatedAt ?? Date.now(),
     });
   }
@@ -364,7 +391,7 @@ export class QueryBuilder {
    */
   deleteNode(id: string): void {
     if (!this.stmts.deleteNode) {
-      this.stmts.deleteNode = this.db.prepare('DELETE FROM nodes WHERE id = ?');
+      this.stmts.deleteNode = this.db.prepare("DELETE FROM nodes WHERE id = ?");
     }
     // Invalidate cache
     this.nodeCache.delete(id);
@@ -376,7 +403,9 @@ export class QueryBuilder {
    */
   deleteNodesByFile(filePath: string): void {
     if (!this.stmts.deleteNodesByFile) {
-      this.stmts.deleteNodesByFile = this.db.prepare('DELETE FROM nodes WHERE file_path = ?');
+      this.stmts.deleteNodesByFile = this.db.prepare(
+        "DELETE FROM nodes WHERE file_path = ?",
+      );
     }
     // Invalidate cache for nodes in this file
     for (const [id, node] of this.nodeCache) {
@@ -401,7 +430,9 @@ export class QueryBuilder {
     }
 
     if (!this.stmts.getNodeById) {
-      this.stmts.getNodeById = this.db.prepare('SELECT * FROM nodes WHERE id = ?');
+      this.stmts.getNodeById = this.db.prepare(
+        "SELECT * FROM nodes WHERE id = ?",
+      );
     }
     const row = this.stmts.getNodeById.get(id) as NodeRow | undefined;
     if (!row) {
@@ -452,7 +483,7 @@ export class QueryBuilder {
     // backends and to keep the query plan simple).
     for (let i = 0; i < misses.length; i += SQLITE_PARAM_CHUNK_SIZE) {
       const chunk = misses.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
-      const placeholders = chunk.map(() => '?').join(',');
+      const placeholders = chunk.map(() => "?").join(",");
       const rows = this.db
         .prepare(`SELECT * FROM nodes WHERE id IN (${placeholders})`)
         .all(...chunk) as NodeRow[];
@@ -472,7 +503,7 @@ export class QueryBuilder {
     const uniqueIds = [...new Set(ids)];
     for (let i = 0; i < uniqueIds.length; i += SQLITE_PARAM_CHUNK_SIZE) {
       const chunk = uniqueIds.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
-      const placeholders = chunk.map(() => '?').join(',');
+      const placeholders = chunk.map(() => "?").join(",");
       const rows = this.db
         .prepare(`SELECT id FROM nodes WHERE id IN (${placeholders})`)
         .all(...chunk) as { id: string }[];
@@ -511,7 +542,7 @@ export class QueryBuilder {
   getNodesByFile(filePath: string): Node[] {
     if (!this.stmts.getNodesByFile) {
       this.stmts.getNodesByFile = this.db.prepare(
-        'SELECT * FROM nodes WHERE file_path = ? ORDER BY start_line'
+        "SELECT * FROM nodes WHERE file_path = ? ORDER BY start_line",
       );
     }
     const rows = this.stmts.getNodesByFile.all(filePath) as NodeRow[];
@@ -536,7 +567,11 @@ export class QueryBuilder {
    * typical question is "how does X work", not "how is X tested", so
    * boosting a test file's directory would be a misfire.
    */
-  getDominantFile(): { filePath: string; edgeCount: number; nextEdgeCount: number } | null {
+  getDominantFile(): {
+    filePath: string;
+    edgeCount: number;
+    nextEdgeCount: number;
+  } | null {
     if (!this.stmts.getDominantFile) {
       // Pull top 20 candidates; we then filter out test/generated files
       // in code (regex-grade matching that SQL LIKE can't express). The
@@ -556,8 +591,11 @@ export class QueryBuilder {
         LIMIT 20
       `);
     }
-    const rows = this.stmts.getDominantFile.all() as Array<{ file_path: string; edge_count: number }>;
-    const filtered = rows.filter(r => !isLowValueFile(r.file_path));
+    const rows = this.stmts.getDominantFile.all() as Array<{
+      file_path: string;
+      edge_count: number;
+    }>;
+    const filtered = rows.filter((r) => !isLowValueFile(r.file_path));
     if (filtered.length === 0 || filtered[0]!.edge_count < 20) return null;
     return {
       filePath: filtered[0]!.file_path,
@@ -578,7 +616,11 @@ export class QueryBuilder {
    * are fewer than 3 non-test routes total, or if no file holds at least
    * 30% of them (diffuse routing → no single answer file).
    */
-  getTopRouteFile(): { filePath: string; routeCount: number; totalRoutes: number } | null {
+  getTopRouteFile(): {
+    filePath: string;
+    routeCount: number;
+    totalRoutes: number;
+  } | null {
     if (!this.stmts.getTopRouteFile) {
       this.stmts.getTopRouteFile = this.db.prepare(`
         SELECT file_path, COUNT(*) AS cnt
@@ -589,13 +631,16 @@ export class QueryBuilder {
         LIMIT 20
       `);
     }
-    const rows = this.stmts.getTopRouteFile.all() as Array<{ file_path: string; cnt: number }>;
-    const filtered = rows.filter(r => !isLowValueFile(r.file_path));
+    const rows = this.stmts.getTopRouteFile.all() as Array<{
+      file_path: string;
+      cnt: number;
+    }>;
+    const filtered = rows.filter((r) => !isLowValueFile(r.file_path));
     if (filtered.length === 0) return null;
     const totalRoutes = filtered.reduce((sum, r) => sum + r.cnt, 0);
     const top = filtered[0]!;
     if (totalRoutes < 3 || top.cnt < 3) return null;
-    if (top.cnt / totalRoutes < 0.30) return null;
+    if (top.cnt / totalRoutes < 0.3) return null;
     return { filePath: top.file_path, routeCount: top.cnt, totalRoutes };
   }
 
@@ -611,7 +656,13 @@ export class QueryBuilder {
    * mapping AND the handler implementations.
    */
   getRoutingManifest(limit: number = 40): {
-    entries: Array<{ url: string; handler: string; handlerFile: string; handlerLine: number; handlerKind: string }>;
+    entries: Array<{
+      url: string;
+      handler: string;
+      handlerFile: string;
+      handlerLine: number;
+      handlerKind: string;
+    }>;
     topHandlerFile: string | null;
     topHandlerFileCount: number;
     totalRoutes: number;
@@ -638,10 +689,14 @@ export class QueryBuilder {
       `);
     }
     const rows = this.stmts.getRoutingManifest.all(limit) as Array<{
-      url: string; handler: string; handler_file: string; handler_line: number; handler_kind: string;
+      url: string;
+      handler: string;
+      handler_file: string;
+      handler_line: number;
+      handler_kind: string;
     }>;
     // Drop test/generated handlers — same hygiene as elsewhere.
-    const filtered = rows.filter(r => !isLowValueFile(r.handler_file));
+    const filtered = rows.filter((r) => !isLowValueFile(r.handler_file));
     if (filtered.length < 3) return null;
     // Identify the file holding the most handlers (the "primary handler file").
     const fileCounts = new Map<string, number>();
@@ -657,7 +712,7 @@ export class QueryBuilder {
       }
     }
     return {
-      entries: filtered.map(r => ({
+      entries: filtered.map((r) => ({
         url: r.url,
         handler: r.handler,
         handlerFile: r.handler_file,
@@ -675,7 +730,9 @@ export class QueryBuilder {
    */
   getNodesByKind(kind: NodeKind): Node[] {
     if (!this.stmts.getNodesByKind) {
-      this.stmts.getNodesByKind = this.db.prepare('SELECT * FROM nodes WHERE kind = ?');
+      this.stmts.getNodesByKind = this.db.prepare(
+        "SELECT * FROM nodes WHERE kind = ?",
+      );
     }
     const rows = this.stmts.getNodesByKind.all(kind) as NodeRow[];
     return rows.map(rowToNode);
@@ -685,7 +742,7 @@ export class QueryBuilder {
    * Get all nodes in the database
    */
   getAllNodes(): Node[] {
-    const rows = this.db.prepare('SELECT * FROM nodes').all() as NodeRow[];
+    const rows = this.db.prepare("SELECT * FROM nodes").all() as NodeRow[];
     return rows.map(rowToNode);
   }
 
@@ -694,7 +751,9 @@ export class QueryBuilder {
    */
   getNodesByName(name: string): Node[] {
     if (!this.stmts.getNodesByName) {
-      this.stmts.getNodesByName = this.db.prepare('SELECT * FROM nodes WHERE name = ?');
+      this.stmts.getNodesByName = this.db.prepare(
+        "SELECT * FROM nodes WHERE name = ?",
+      );
     }
     const rows = this.stmts.getNodesByName.all(name) as NodeRow[];
     return rows.map(rowToNode);
@@ -706,10 +765,12 @@ export class QueryBuilder {
   getNodesByQualifiedNameExact(qualifiedName: string): Node[] {
     if (!this.stmts.getNodesByQualifiedNameExact) {
       this.stmts.getNodesByQualifiedNameExact = this.db.prepare(
-        'SELECT * FROM nodes WHERE qualified_name = ?'
+        "SELECT * FROM nodes WHERE qualified_name = ?",
       );
     }
-    const rows = this.stmts.getNodesByQualifiedNameExact.all(qualifiedName) as NodeRow[];
+    const rows = this.stmts.getNodesByQualifiedNameExact.all(
+      qualifiedName,
+    ) as NodeRow[];
     return rows.map(rowToNode);
   }
 
@@ -719,7 +780,7 @@ export class QueryBuilder {
   getNodesByLowerName(lowerName: string): Node[] {
     if (!this.stmts.getNodesByLowerName) {
       this.stmts.getNodesByLowerName = this.db.prepare(
-        'SELECT * FROM nodes WHERE lower(name) = ?'
+        "SELECT * FROM nodes WHERE lower(name) = ?",
       );
     }
     const rows = this.stmts.getNodesByLowerName.all(lowerName) as NodeRow[];
@@ -734,6 +795,7 @@ export class QueryBuilder {
    * 2. If no results, try LIKE for substring matching (e.g., "signIn" finds "signInWithGoogle")
    * 3. Score results based on match quality
    */
+  //TODO:tomorrow
   searchNodes(query: string, options: SearchOptions = {}): SearchResult[] {
     const { limit = 100, offset = 0 } = options;
 
@@ -748,7 +810,9 @@ export class QueryBuilder {
         : options.kinds;
     const mergedLanguages =
       parsed.languages.length > 0
-        ? Array.from(new Set([...(options.languages ?? []), ...parsed.languages]))
+        ? Array.from(
+            new Set([...(options.languages ?? []), ...parsed.languages]),
+          )
         : options.languages;
     const pathFilters = parsed.pathFilters;
     const nameFilters = parsed.nameFilters;
@@ -763,11 +827,11 @@ export class QueryBuilder {
     // First try FTS5 with prefix matching
     let results = text
       ? this.searchNodesFTS(text, { kinds, languages, limit, offset })
-      // Over-fetch by 5× when running filter-only (no text). The
-      // post-scoring path: + name: filters can be very selective, so
-      // a smaller multiplier risks returning fewer than `limit`
-      // results despite the DB having plenty of matches.
-      : this.searchAllByFilters({ kinds, languages, limit: limit * 5 });
+      : // Over-fetch by 5× when running filter-only (no text). The
+        // post-scoring path: + name: filters can be very selective, so
+        // a smaller multiplier risks returning fewer than `limit`
+        // results despite the DB having plenty of matches.
+        this.searchAllByFilters({ kinds, languages, limit: limit * 5 });
 
     // If no FTS results, try LIKE-based substring search
     if (results.length === 0 && text.length >= 2) {
@@ -789,21 +853,21 @@ export class QueryBuilder {
     // Use the max BM25 score as the base so the nameMatchBonus (exact=30 vs
     // prefix=20) actually differentiates them after rescoring.
     if (results.length > 0 && query) {
-      const existingIds = new Set(results.map(r => r.node.id));
-      const maxFtsScore = Math.max(...results.map(r => r.score));
-      const terms = query.split(/\s+/).filter(t => t.length >= 2);
+      const existingIds = new Set(results.map((r) => r.node.id));
+      const maxFtsScore = Math.max(...results.map((r) => r.score));
+      const terms = query.split(/\s+/).filter((t) => t.length >= 2);
       for (const term of terms) {
-        let sql = 'SELECT * FROM nodes WHERE name = ? COLLATE NOCASE';
+        let sql = "SELECT * FROM nodes WHERE name = ? COLLATE NOCASE";
         const params: (string | number)[] = [term];
         if (kinds && kinds.length > 0) {
-          sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+          sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
           params.push(...kinds);
         }
         if (languages && languages.length > 0) {
-          sql += ` AND language IN (${languages.map(() => '?').join(',')})`;
+          sql += ` AND language IN (${languages.map(() => "?").join(",")})`;
           params.push(...languages);
         }
-        sql += ' LIMIT 20';
+        sql += " LIMIT 20";
         const rows = this.db.prepare(sql).all(...params) as NodeRow[];
         for (const row of rows) {
           if (!existingIds.has(row.id)) {
@@ -817,12 +881,13 @@ export class QueryBuilder {
     // Apply multi-signal scoring
     if (results.length > 0 && (text || query)) {
       const scoringQuery = text || query;
-      results = results.map(r => ({
+      results = results.map((r) => ({
         ...r,
-        score: r.score
-          + kindBonus(r.node.kind)
-          + scorePathRelevance(r.node.filePath, scoringQuery)
-          + nameMatchBonus(r.node.name, scoringQuery),
+        score:
+          r.score +
+          kindBonus(r.node.kind) +
+          scorePathRelevance(r.node.filePath, scoringQuery) +
+          nameMatchBonus(r.node.name, scoringQuery),
       }));
       results.sort((a, b) => b.score - a.score);
       // Trim to requested limit after rescoring
@@ -865,17 +930,17 @@ export class QueryBuilder {
     limit: number;
   }): SearchResult[] {
     const { kinds, languages, limit } = options;
-    let sql = 'SELECT * FROM nodes WHERE 1=1';
+    let sql = "SELECT * FROM nodes WHERE 1=1";
     const params: (string | number)[] = [];
     if (kinds && kinds.length > 0) {
-      sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+      sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
       params.push(...kinds);
     }
     if (languages && languages.length > 0) {
-      sql += ` AND language IN (${languages.map(() => '?').join(',')})`;
+      sql += ` AND language IN (${languages.map(() => "?").join(",")})`;
       params.push(...languages);
     }
-    sql += ' ORDER BY name LIMIT ?';
+    sql += " ORDER BY name LIMIT ?";
     params.push(limit);
     const rows = this.db.prepare(sql).all(...params) as NodeRow[];
     return rows.map((row) => ({ node: rowToNode(row), score: 1 }));
@@ -891,7 +956,7 @@ export class QueryBuilder {
    */
   private searchNodesFuzzy(
     text: string,
-    options: { kinds?: NodeKind[]; languages?: Language[]; limit: number }
+    options: { kinds?: NodeKind[]; languages?: Language[]; limit: number },
   ): SearchResult[] {
     const { kinds, languages, limit } = options;
     const lowered = text.toLowerCase();
@@ -921,17 +986,17 @@ export class QueryBuilder {
     const seen = new Set<string>();
     for (const c of cappedCandidates) {
       if (results.length >= limit) break;
-      let sql = 'SELECT * FROM nodes WHERE name = ?';
+      let sql = "SELECT * FROM nodes WHERE name = ?";
       const params: (string | number)[] = [c.name];
       if (kinds && kinds.length > 0) {
-        sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+        sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
         params.push(...kinds);
       }
       if (languages && languages.length > 0) {
-        sql += ` AND language IN (${languages.map(() => '?').join(',')})`;
+        sql += ` AND language IN (${languages.map(() => "?").join(",")})`;
         params.push(...languages);
       }
-      sql += ' LIMIT 5';
+      sql += " LIMIT 5";
       const rows = this.db.prepare(sql).all(...params) as NodeRow[];
       for (const row of rows) {
         if (seen.has(row.id)) continue;
@@ -948,7 +1013,10 @@ export class QueryBuilder {
   /**
    * FTS5 search with prefix matching
    */
-  private searchNodesFTS(query: string, options: SearchOptions): SearchResult[] {
+  private searchNodesFTS(
+    query: string,
+    options: SearchOptions,
+  ): SearchResult[] {
     const { kinds, languages, limit = 100, offset = 0 } = options;
 
     // Add prefix wildcard for better matching (e.g., "auth" matches "AuthService", "authenticate")
@@ -959,14 +1027,14 @@ export class QueryBuilder {
     // like `stage_apply::run` collapse to `stage_applyrun` (the colons
     // are stripped without splitting) and find nothing. See #173.
     const ftsQuery = query
-      .replace(/::/g, ' ') // Rust/C++/Ruby qualifier separator
-      .replace(/['"*():^]/g, '') // Remove FTS5 special chars
+      .replace(/::/g, " ") // Rust/C++/Ruby qualifier separator
+      .replace(/['"*():^]/g, "") // Remove FTS5 special chars
       .split(/\s+/)
-      .filter(term => term.length > 0)
+      .filter((term) => term.length > 0)
       // Strip FTS5 boolean operators to prevent query manipulation
-      .filter(term => !/^(AND|OR|NOT|NEAR)$/i.test(term))
-      .map(term => `"${term}"*`) // Prefix match each term
-      .join(' OR ');
+      .filter((term) => !/^(AND|OR|NOT|NEAR)$/i.test(term))
+      .map((term) => `"${term}"*`) // Prefix match each term
+      .join(" OR ");
 
     if (!ftsQuery) {
       return [];
@@ -989,20 +1057,22 @@ export class QueryBuilder {
     const params: (string | number)[] = [ftsQuery];
 
     if (kinds && kinds.length > 0) {
-      sql += ` AND nodes.kind IN (${kinds.map(() => '?').join(',')})`;
+      sql += ` AND nodes.kind IN (${kinds.map(() => "?").join(",")})`;
       params.push(...kinds);
     }
 
     if (languages && languages.length > 0) {
-      sql += ` AND nodes.language IN (${languages.map(() => '?').join(',')})`;
+      sql += ` AND nodes.language IN (${languages.map(() => "?").join(",")})`;
       params.push(...languages);
     }
 
-    sql += ' ORDER BY score LIMIT ? OFFSET ?';
+    sql += " ORDER BY score LIMIT ? OFFSET ?";
     params.push(ftsLimit, offset);
 
     try {
-      const rows = this.db.prepare(sql).all(...params) as (NodeRow & { score: number })[];
+      const rows = this.db.prepare(sql).all(...params) as (NodeRow & {
+        score: number;
+      })[];
       return rows.map((row) => ({
         node: rowToNode(row),
         score: Math.abs(row.score), // bm25 returns negative scores
@@ -1017,7 +1087,10 @@ export class QueryBuilder {
    * LIKE-based substring search for cases where FTS doesn't match
    * Useful for camelCase matching (e.g., "signIn" finds "signInWithGoogle")
    */
-  private searchNodesLike(query: string, options: SearchOptions): SearchResult[] {
+  private searchNodesLike(
+    query: string,
+    options: SearchOptions,
+  ): SearchResult[] {
     const { kinds, languages, limit = 100, offset = 0 } = options;
 
     let sql = `
@@ -1043,29 +1116,31 @@ export class QueryBuilder {
     const contains = `%${query}%`;
 
     const params: (string | number)[] = [
-      exactMatch,     // Exact match score
-      startsWith,     // Starts with score
-      contains,       // Contains score
-      contains,       // Qualified name score
-      contains,       // WHERE: name contains
-      contains,       // WHERE: qualified_name contains
-      startsWith,     // WHERE: name starts with
+      exactMatch, // Exact match score
+      startsWith, // Starts with score
+      contains, // Contains score
+      contains, // Qualified name score
+      contains, // WHERE: name contains
+      contains, // WHERE: qualified_name contains
+      startsWith, // WHERE: name starts with
     ];
 
     if (kinds && kinds.length > 0) {
-      sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+      sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
       params.push(...kinds);
     }
 
     if (languages && languages.length > 0) {
-      sql += ` AND language IN (${languages.map(() => '?').join(',')})`;
+      sql += ` AND language IN (${languages.map(() => "?").join(",")})`;
       params.push(...languages);
     }
 
-    sql += ' ORDER BY score DESC, length(name) ASC LIMIT ? OFFSET ?';
+    sql += " ORDER BY score DESC, length(name) ASC LIMIT ? OFFSET ?";
     params.push(limit, offset);
 
-    const rows = this.db.prepare(sql).all(...params) as (NodeRow & { score: number })[];
+    const rows = this.db.prepare(sql).all(...params) as (NodeRow & {
+      score: number;
+    })[];
 
     return rows.map((row) => ({
       node: rowToNode(row),
@@ -1083,7 +1158,10 @@ export class QueryBuilder {
    * @param options - Search options (kinds, languages, limit)
    * @returns SearchResult array with exact matches scored at 1.0
    */
-  findNodesByExactName(names: string[], options: SearchOptions = {}): SearchResult[] {
+  findNodesByExactName(
+    names: string[],
+    options: SearchOptions = {},
+  ): SearchResult[] {
     if (names.length === 0) return [];
 
     const { kinds, languages, limit = 50 } = options;
@@ -1095,15 +1173,21 @@ export class QueryBuilder {
     // Pass 1: Find files containing each queried name, identify distinctive names
     const nameToFiles = new Map<string, Set<string>>();
     for (const name of names) {
-      let sql = 'SELECT DISTINCT file_path FROM nodes WHERE name COLLATE NOCASE = ?';
+      let sql =
+        "SELECT DISTINCT file_path FROM nodes WHERE name COLLATE NOCASE = ?";
       const params: (string | number)[] = [name];
       if (kinds && kinds.length > 0) {
-        sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+        sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
         params.push(...kinds);
       }
-      sql += ' LIMIT 100';
-      const rows = this.db.prepare(sql).all(...params) as { file_path: string }[];
-      nameToFiles.set(name.toLowerCase(), new Set(rows.map(r => r.file_path)));
+      sql += " LIMIT 100";
+      const rows = this.db.prepare(sql).all(...params) as {
+        file_path: string;
+      }[];
+      nameToFiles.set(
+        name.toLowerCase(),
+        new Set(rows.map((r) => r.file_path)),
+      );
     }
 
     // Distinctive names are those with fewer than 10 file matches (e.g., "scrapeLoop" = 1 file)
@@ -1128,20 +1212,22 @@ export class QueryBuilder {
       const params: (string | number)[] = [name];
 
       if (kinds && kinds.length > 0) {
-        sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+        sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
         params.push(...kinds);
       }
 
       if (languages && languages.length > 0) {
-        sql += ` AND language IN (${languages.map(() => '?').join(',')})`;
+        sql += ` AND language IN (${languages.map(() => "?").join(",")})`;
         params.push(...languages);
       }
 
       // Fetch enough to find co-located results among common names
-      sql += ' LIMIT ?';
+      sql += " LIMIT ?";
       params.push(Math.max(perNameLimit * 3, 50));
 
-      const rows = this.db.prepare(sql).all(...params) as (NodeRow & { score: number })[];
+      const rows = this.db.prepare(sql).all(...params) as (NodeRow & {
+        score: number;
+      })[];
       const nameResults: SearchResult[] = [];
       for (const row of rows) {
         const node = rowToNode(row);
@@ -1173,7 +1259,7 @@ export class QueryBuilder {
    */
   findNodesByNameSubstring(
     substring: string,
-    options: SearchOptions & { excludePrefix?: boolean } = {}
+    options: SearchOptions & { excludePrefix?: boolean } = {},
   ): SearchResult[] {
     const { kinds, languages, limit = 30, excludePrefix } = options;
 
@@ -1191,19 +1277,21 @@ export class QueryBuilder {
     }
 
     if (kinds && kinds.length > 0) {
-      sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+      sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
       params.push(...kinds);
     }
 
     if (languages && languages.length > 0) {
-      sql += ` AND language IN (${languages.map(() => '?').join(',')})`;
+      sql += ` AND language IN (${languages.map(() => "?").join(",")})`;
       params.push(...languages);
     }
 
-    sql += ' ORDER BY length(name) ASC LIMIT ?';
+    sql += " ORDER BY length(name) ASC LIMIT ?";
     params.push(limit);
 
-    const rows = this.db.prepare(sql).all(...params) as (NodeRow & { score: number })[];
+    const rows = this.db.prepare(sql).all(...params) as (NodeRow & {
+      score: number;
+    })[];
     return rows.map((row) => ({
       node: rowToNode(row),
       score: row.score,
@@ -1251,7 +1339,10 @@ export class QueryBuilder {
       const existingNodeIds = this.getExistingNodeIds([...endpointIds]);
 
       for (const edge of edges) {
-        if (!existingNodeIds.has(edge.source) || !existingNodeIds.has(edge.target)) {
+        if (
+          !existingNodeIds.has(edge.source) ||
+          !existingNodeIds.has(edge.target)
+        ) {
           continue;
         }
         this.insertEdge(edge);
@@ -1264,7 +1355,9 @@ export class QueryBuilder {
    */
   deleteEdgesBySource(sourceId: string): void {
     if (!this.stmts.deleteEdgesBySource) {
-      this.stmts.deleteEdgesBySource = this.db.prepare('DELETE FROM edges WHERE source = ?');
+      this.stmts.deleteEdgesBySource = this.db.prepare(
+        "DELETE FROM edges WHERE source = ?",
+      );
     }
     this.stmts.deleteEdgesBySource.run(sourceId);
   }
@@ -1272,18 +1365,22 @@ export class QueryBuilder {
   /**
    * Get outgoing edges from a node
    */
-  getOutgoingEdges(sourceId: string, kinds?: EdgeKind[], provenance?: string): Edge[] {
+  getOutgoingEdges(
+    sourceId: string,
+    kinds?: EdgeKind[],
+    provenance?: string,
+  ): Edge[] {
     if ((kinds && kinds.length > 0) || provenance) {
-      let sql = 'SELECT * FROM edges WHERE source = ?';
+      let sql = "SELECT * FROM edges WHERE source = ?";
       const params: (string | number)[] = [sourceId];
 
       if (kinds && kinds.length > 0) {
-        sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+        sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
         params.push(...kinds);
       }
 
       if (provenance) {
-        sql += ' AND provenance = ?';
+        sql += " AND provenance = ?";
         params.push(provenance);
       }
 
@@ -1292,7 +1389,9 @@ export class QueryBuilder {
     }
 
     if (!this.stmts.getEdgesBySource) {
-      this.stmts.getEdgesBySource = this.db.prepare('SELECT * FROM edges WHERE source = ?');
+      this.stmts.getEdgesBySource = this.db.prepare(
+        "SELECT * FROM edges WHERE source = ?",
+      );
     }
     const rows = this.stmts.getEdgesBySource.all(sourceId) as EdgeRow[];
     return rows.map(rowToEdge);
@@ -1303,13 +1402,15 @@ export class QueryBuilder {
    */
   getIncomingEdges(targetId: string, kinds?: EdgeKind[]): Edge[] {
     if (kinds && kinds.length > 0) {
-      const sql = `SELECT * FROM edges WHERE target = ? AND kind IN (${kinds.map(() => '?').join(',')})`;
+      const sql = `SELECT * FROM edges WHERE target = ? AND kind IN (${kinds.map(() => "?").join(",")})`;
       const rows = this.db.prepare(sql).all(targetId, ...kinds) as EdgeRow[];
       return rows.map(rowToEdge);
     }
 
     if (!this.stmts.getEdgesByTarget) {
-      this.stmts.getEdgesByTarget = this.db.prepare('SELECT * FROM edges WHERE target = ?');
+      this.stmts.getEdgesByTarget = this.db.prepare(
+        "SELECT * FROM edges WHERE target = ?",
+      );
     }
     const rows = this.stmts.getEdgesByTarget.all(targetId) as EdgeRow[];
     return rows.map(rowToEdge);
@@ -1327,7 +1428,7 @@ export class QueryBuilder {
     const params: string[] = [idsJson, idsJson];
 
     if (kinds && kinds.length > 0) {
-      sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+      sql += ` AND kind IN (${kinds.map(() => "?").join(",")})`;
       params.push(...kinds);
     }
 
@@ -1377,7 +1478,9 @@ export class QueryBuilder {
     this.db.transaction(() => {
       this.deleteNodesByFile(filePath);
       if (!this.stmts.deleteFile) {
-        this.stmts.deleteFile = this.db.prepare('DELETE FROM files WHERE path = ?');
+        this.stmts.deleteFile = this.db.prepare(
+          "DELETE FROM files WHERE path = ?",
+        );
       }
       this.stmts.deleteFile.run(filePath);
     })();
@@ -1388,7 +1491,9 @@ export class QueryBuilder {
    */
   getFileByPath(filePath: string): FileRecord | null {
     if (!this.stmts.getFileByPath) {
-      this.stmts.getFileByPath = this.db.prepare('SELECT * FROM files WHERE path = ?');
+      this.stmts.getFileByPath = this.db.prepare(
+        "SELECT * FROM files WHERE path = ?",
+      );
     }
     const row = this.stmts.getFileByPath.get(filePath) as FileRow | undefined;
     return row ? rowToFileRecord(row) : null;
@@ -1399,7 +1504,9 @@ export class QueryBuilder {
    */
   getAllFiles(): FileRecord[] {
     if (!this.stmts.getAllFiles) {
-      this.stmts.getAllFiles = this.db.prepare('SELECT * FROM files ORDER BY path');
+      this.stmts.getAllFiles = this.db.prepare(
+        "SELECT * FROM files ORDER BY path",
+      );
     }
     const rows = this.stmts.getAllFiles.all() as FileRow[];
     return rows.map(rowToFileRecord);
@@ -1438,8 +1545,8 @@ export class QueryBuilder {
       line: ref.line,
       col: ref.column,
       candidates: ref.candidates ? JSON.stringify(ref.candidates) : null,
-      filePath: ref.filePath ?? '',
-      language: ref.language ?? 'unknown',
+      filePath: ref.filePath ?? "",
+      language: ref.language ?? "unknown",
     });
   }
 
@@ -1462,7 +1569,7 @@ export class QueryBuilder {
   deleteUnresolvedByNode(nodeId: string): void {
     if (!this.stmts.deleteUnresolvedByNode) {
       this.stmts.deleteUnresolvedByNode = this.db.prepare(
-        'DELETE FROM unresolved_refs WHERE from_node_id = ?'
+        "DELETE FROM unresolved_refs WHERE from_node_id = ?",
       );
     }
     this.stmts.deleteUnresolvedByNode.run(nodeId);
@@ -1474,7 +1581,7 @@ export class QueryBuilder {
   getUnresolvedByName(name: string): UnresolvedReference[] {
     if (!this.stmts.getUnresolvedByName) {
       this.stmts.getUnresolvedByName = this.db.prepare(
-        'SELECT * FROM unresolved_refs WHERE reference_name = ?'
+        "SELECT * FROM unresolved_refs WHERE reference_name = ?",
       );
     }
     const rows = this.stmts.getUnresolvedByName.all(name) as UnresolvedRefRow[];
@@ -1484,7 +1591,9 @@ export class QueryBuilder {
       referenceKind: row.reference_kind as EdgeKind,
       line: row.line,
       column: row.col,
-      candidates: row.candidates ? safeJsonParse(row.candidates, undefined) : undefined,
+      candidates: row.candidates
+        ? safeJsonParse(row.candidates, undefined)
+        : undefined,
       filePath: row.file_path,
       language: row.language as Language,
     }));
@@ -1494,14 +1603,18 @@ export class QueryBuilder {
    * Get all unresolved references
    */
   getUnresolvedReferences(): UnresolvedReference[] {
-    const rows = this.db.prepare('SELECT * FROM unresolved_refs').all() as UnresolvedRefRow[];
+    const rows = this.db
+      .prepare("SELECT * FROM unresolved_refs")
+      .all() as UnresolvedRefRow[];
     return rows.map((row) => ({
       fromNodeId: row.from_node_id,
       referenceName: row.reference_name,
       referenceKind: row.reference_kind as EdgeKind,
       line: row.line,
       column: row.col,
-      candidates: row.candidates ? safeJsonParse(row.candidates, undefined) : undefined,
+      candidates: row.candidates
+        ? safeJsonParse(row.candidates, undefined)
+        : undefined,
       filePath: row.file_path,
       language: row.language as Language,
     }));
@@ -1513,7 +1626,7 @@ export class QueryBuilder {
   getUnresolvedReferencesCount(): number {
     if (!this.stmts.getUnresolvedCount) {
       this.stmts.getUnresolvedCount = this.db.prepare(
-        'SELECT COUNT(*) as count FROM unresolved_refs'
+        "SELECT COUNT(*) as count FROM unresolved_refs",
       );
     }
     const row = this.stmts.getUnresolvedCount.get() as { count: number };
@@ -1524,20 +1637,28 @@ export class QueryBuilder {
    * Get a batch of unresolved references using LIMIT/OFFSET pagination.
    * Used to process references in bounded memory chunks.
    */
-  getUnresolvedReferencesBatch(offset: number, limit: number): UnresolvedReference[] {
+  getUnresolvedReferencesBatch(
+    offset: number,
+    limit: number,
+  ): UnresolvedReference[] {
     if (!this.stmts.getUnresolvedBatch) {
       this.stmts.getUnresolvedBatch = this.db.prepare(
-        'SELECT * FROM unresolved_refs LIMIT ? OFFSET ?'
+        "SELECT * FROM unresolved_refs LIMIT ? OFFSET ?",
       );
     }
-    const rows = this.stmts.getUnresolvedBatch.all(limit, offset) as UnresolvedRefRow[];
+    const rows = this.stmts.getUnresolvedBatch.all(
+      limit,
+      offset,
+    ) as UnresolvedRefRow[];
     return rows.map((row) => ({
       fromNodeId: row.from_node_id,
       referenceName: row.reference_name,
       referenceKind: row.reference_kind as EdgeKind,
       line: row.line,
       column: row.col,
-      candidates: row.candidates ? safeJsonParse(row.candidates, undefined) : undefined,
+      candidates: row.candidates
+        ? safeJsonParse(row.candidates, undefined)
+        : undefined,
       filePath: row.file_path,
       language: row.language as Language,
     }));
@@ -1548,7 +1669,9 @@ export class QueryBuilder {
    */
   getAllFilePaths(): string[] {
     if (!this.stmts.getAllFilePaths) {
-      this.stmts.getAllFilePaths = this.db.prepare('SELECT path FROM files ORDER BY path');
+      this.stmts.getAllFilePaths = this.db.prepare(
+        "SELECT path FROM files ORDER BY path",
+      );
     }
     const rows = this.stmts.getAllFilePaths.all() as Array<{ path: string }>;
     return rows.map((r) => r.path);
@@ -1559,7 +1682,9 @@ export class QueryBuilder {
    */
   getAllNodeNames(): string[] {
     if (!this.stmts.getAllNodeNames) {
-      this.stmts.getAllNodeNames = this.db.prepare('SELECT DISTINCT name FROM nodes');
+      this.stmts.getAllNodeNames = this.db.prepare(
+        "SELECT DISTINCT name FROM nodes",
+      );
     }
     const rows = this.stmts.getAllNodeNames.all() as Array<{ name: string }>;
     return rows.map((r) => r.name);
@@ -1572,9 +1697,11 @@ export class QueryBuilder {
   getUnresolvedReferencesByFiles(filePaths: string[]): UnresolvedReference[] {
     if (filePaths.length === 0) return [];
 
-    const placeholders = filePaths.map(() => '?').join(',');
+    const placeholders = filePaths.map(() => "?").join(",");
     const rows = this.db
-      .prepare(`SELECT * FROM unresolved_refs WHERE file_path IN (${placeholders})`)
+      .prepare(
+        `SELECT * FROM unresolved_refs WHERE file_path IN (${placeholders})`,
+      )
       .all(...filePaths) as UnresolvedRefRow[];
 
     return rows.map((row) => ({
@@ -1583,7 +1710,9 @@ export class QueryBuilder {
       referenceKind: row.reference_kind as EdgeKind,
       line: row.line,
       column: row.col,
-      candidates: row.candidates ? safeJsonParse(row.candidates, undefined) : undefined,
+      candidates: row.candidates
+        ? safeJsonParse(row.candidates, undefined)
+        : undefined,
       filePath: row.file_path,
       language: row.language as Language,
     }));
@@ -1593,7 +1722,7 @@ export class QueryBuilder {
    * Delete all unresolved references (after resolution)
    */
   clearUnresolvedReferences(): void {
-    this.db.exec('DELETE FROM unresolved_refs');
+    this.db.exec("DELETE FROM unresolved_refs");
   }
 
   /**
@@ -1601,18 +1730,28 @@ export class QueryBuilder {
    */
   deleteResolvedReferences(fromNodeIds: string[]): void {
     if (fromNodeIds.length === 0) return;
-    const placeholders = fromNodeIds.map(() => '?').join(',');
-    this.db.prepare(`DELETE FROM unresolved_refs WHERE from_node_id IN (${placeholders})`).run(...fromNodeIds);
+    const placeholders = fromNodeIds.map(() => "?").join(",");
+    this.db
+      .prepare(
+        `DELETE FROM unresolved_refs WHERE from_node_id IN (${placeholders})`,
+      )
+      .run(...fromNodeIds);
   }
 
   /**
    * Delete specific resolved references by (fromNodeId, referenceName, referenceKind) tuples.
    * More precise than deleteResolvedReferences — only removes refs that were actually resolved.
    */
-  deleteSpecificResolvedReferences(refs: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }>): void {
+  deleteSpecificResolvedReferences(
+    refs: Array<{
+      fromNodeId: string;
+      referenceName: string;
+      referenceKind: string;
+    }>,
+  ): void {
     if (refs.length === 0) return;
     const stmt = this.db.prepare(
-      'DELETE FROM unresolved_refs WHERE from_node_id = ? AND reference_name = ? AND reference_kind = ?'
+      "DELETE FROM unresolved_refs WHERE from_node_id = ? AND reference_name = ? AND reference_kind = ?",
     );
     const deleteMany = this.db.transaction((items: typeof refs) => {
       for (const ref of items) {
@@ -1635,7 +1774,9 @@ export class QueryBuilder {
    */
   getNodeAndEdgeCount(): { nodes: number; edges: number } {
     return this.db
-      .prepare('SELECT (SELECT COUNT(*) FROM nodes) AS nodes, (SELECT COUNT(*) FROM edges) AS edges')
+      .prepare(
+        "SELECT (SELECT COUNT(*) FROM nodes) AS nodes, (SELECT COUNT(*) FROM edges) AS edges",
+      )
       .get() as { nodes: number; edges: number };
   }
 
@@ -1644,16 +1785,20 @@ export class QueryBuilder {
    */
   getStats(): GraphStats {
     // Single query for all three aggregate counts
-    const counts = this.db.prepare(`
+    const counts = this.db
+      .prepare(
+        `
       SELECT
         (SELECT COUNT(*) FROM nodes) AS node_count,
         (SELECT COUNT(*) FROM edges) AS edge_count,
         (SELECT COUNT(*) FROM files) AS file_count
-    `).get() as { node_count: number; edge_count: number; file_count: number };
+    `,
+      )
+      .get() as { node_count: number; edge_count: number; file_count: number };
 
     const nodesByKind = {} as Record<NodeKind, number>;
     const nodeKindRows = this.db
-      .prepare('SELECT kind, COUNT(*) as count FROM nodes GROUP BY kind')
+      .prepare("SELECT kind, COUNT(*) as count FROM nodes GROUP BY kind")
       .all() as Array<{ kind: string; count: number }>;
     for (const row of nodeKindRows) {
       nodesByKind[row.kind as NodeKind] = row.count;
@@ -1661,7 +1806,7 @@ export class QueryBuilder {
 
     const edgesByKind = {} as Record<EdgeKind, number>;
     const edgeKindRows = this.db
-      .prepare('SELECT kind, COUNT(*) as count FROM edges GROUP BY kind')
+      .prepare("SELECT kind, COUNT(*) as count FROM edges GROUP BY kind")
       .all() as Array<{ kind: string; count: number }>;
     for (const row of edgeKindRows) {
       edgesByKind[row.kind as EdgeKind] = row.count;
@@ -1669,7 +1814,9 @@ export class QueryBuilder {
 
     const filesByLanguage = {} as Record<Language, number>;
     const languageRows = this.db
-      .prepare('SELECT language, COUNT(*) as count FROM files GROUP BY language')
+      .prepare(
+        "SELECT language, COUNT(*) as count FROM files GROUP BY language",
+      )
       .all() as Array<{ language: string; count: number }>;
     for (const row of languageRows) {
       filesByLanguage[row.language as Language] = row.count;
@@ -1695,7 +1842,9 @@ export class QueryBuilder {
    * Get a metadata value by key
    */
   getMetadata(key: string): string | null {
-    const row = this.db.prepare('SELECT value FROM project_metadata WHERE key = ?').get(key) as { value: string } | undefined;
+    const row = this.db
+      .prepare("SELECT value FROM project_metadata WHERE key = ?")
+      .get(key) as { value: string } | undefined;
     return row?.value ?? null;
   }
 
@@ -1703,16 +1852,20 @@ export class QueryBuilder {
    * Set a metadata key-value pair (upsert)
    */
   setMetadata(key: string, value: string): void {
-    this.db.prepare(
-      'INSERT INTO project_metadata (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
-    ).run(key, value, Date.now());
+    this.db
+      .prepare(
+        "INSERT INTO project_metadata (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+      )
+      .run(key, value, Date.now());
   }
 
   /**
    * Get all metadata as a key-value record
    */
   getAllMetadata(): Record<string, string> {
-    const rows = this.db.prepare('SELECT key, value FROM project_metadata').all() as { key: string; value: string }[];
+    const rows = this.db
+      .prepare("SELECT key, value FROM project_metadata")
+      .all() as { key: string; value: string }[];
     const result: Record<string, string> = {};
     for (const row of rows) {
       result[row.key] = row.value;
@@ -1726,10 +1879,10 @@ export class QueryBuilder {
   clear(): void {
     this.nodeCache.clear();
     this.db.transaction(() => {
-      this.db.exec('DELETE FROM unresolved_refs');
-      this.db.exec('DELETE FROM edges');
-      this.db.exec('DELETE FROM nodes');
-      this.db.exec('DELETE FROM files');
+      this.db.exec("DELETE FROM unresolved_refs");
+      this.db.exec("DELETE FROM edges");
+      this.db.exec("DELETE FROM nodes");
+      this.db.exec("DELETE FROM files");
     })();
   }
 }

@@ -358,6 +358,7 @@ export class CodeGraph {
    * Uses a mutex to prevent concurrent indexing operations.
    */
   async indexAll(options: IndexOptions = {}): Promise<IndexResult> {
+    //TODO: 加锁
     return this.indexMutex.withLock(async () => {
       try {
         this.fileLock.acquire();

@@ -5,11 +5,15 @@
  * stays unblocked and the UI animation renders smoothly.
  */
 
-import { parentPort } from 'worker_threads';
-import { extractFromSource } from './tree-sitter';
-import { detectLanguage, loadGrammarsForLanguages, resetParser } from './grammars';
-import type { Language, ExtractionResult } from '../types';
-
+import { parentPort } from "worker_threads";
+import { extractFromSource } from "./tree-sitter";
+import {
+  detectLanguage,
+  loadGrammarsForLanguages,
+  resetParser,
+} from "./grammars";
+import type { Language, ExtractionResult } from "../types";
+//TODO: 独立解析线程
 // Emscripten prints `Aborted()` (and a follow-up RuntimeError diag
 // line) directly to stderr when WASM aborts — before the JS catch
 // runs. Worker stderr is inherited by the parent, so each crash leaks
@@ -28,23 +32,26 @@ import type { Language, ExtractionResult } from '../types';
 //     Emscripten signature. Any user code that legitimately writes
 //     a stderr line starting with that prefix would also be filtered;
 //     in practice no real diagnostic does.
+// 在Worker中拦截 stderr，把特定WASM崩溃日志过滤掉，同时保证Node stream行为不被破坏。
+// {} 创建一个“临时作用域”，让里面的变量用完就消失，不污染外部作用域
 {
   const realWrite = process.stderr.write.bind(process.stderr);
   process.stderr.write = ((
     chunk: string | Uint8Array,
     encoding?: BufferEncoding | ((err?: Error | null) => void),
-    cb?: (err?: Error | null) => void
+    cb?: (err?: Error | null) => void,
   ): boolean => {
-    const s = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8');
+    const s =
+      typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8");
     if (
-      s.startsWith('Aborted(') ||
-      s.includes('Build with -sASSERTIONS for more info')
+      s.startsWith("Aborted(") ||
+      s.includes("Build with -sASSERTIONS for more info")
     ) {
       // Honour the Writable stream contract: callbacks must always
       // fire even when the write is suppressed, or upstream code
       // waiting on the drain signal would hang. Both overload forms
       // are handled (`(chunk, cb)` and `(chunk, encoding, cb)`).
-      if (typeof encoding === 'function') encoding();
+      if (typeof encoding === "function") encoding();
       else if (cb) cb();
       return true;
     }
@@ -55,47 +62,75 @@ import type { Language, ExtractionResult } from '../types';
 const PARSER_RESET_INTERVAL = 5000;
 const parseCounts = new Map<Language, number>();
 
-parentPort!.on('message', async (msg: { type: string; id?: number; filePath?: string; content?: string; languages?: Language[]; frameworkNames?: string[] }) => {
-  if (msg.type === 'load-grammars') {
-    await loadGrammarsForLanguages(msg.languages!);
-    parentPort!.postMessage({ type: 'grammars-loaded' });
-  } else if (msg.type === 'parse') {
-    const { id, filePath, content, frameworkNames } = msg;
-    try {
-      const language = detectLanguage(filePath!, content);
-      const result: ExtractionResult = extractFromSource(filePath!, content!, language, frameworkNames);
+parentPort!.on(
+  "message",
+  async (msg: {
+    type: string;
+    id?: number;
+    filePath?: string;
+    content?: string;
+    languages?: Language[];
+    frameworkNames?: string[];
+  }) => {
+    if (msg.type === "load-grammars") {
+      // 加载语法
+      await loadGrammarsForLanguages(msg.languages!);
+      parentPort!.postMessage({ type: "grammars-loaded" });
+    } else if (msg.type === "parse") {
+      //解析文件
+      const { id, filePath, content, frameworkNames } = msg;
+      try {
+        const language = detectLanguage(filePath!, content);
+        const result: ExtractionResult = extractFromSource(
+          filePath!,
+          content!,
+          language,
+          frameworkNames,
+        );
 
-      // Periodic parser reset to reclaim WASM heap memory
-      const count = (parseCounts.get(language) ?? 0) + 1;
-      parseCounts.set(language, count);
-      if (count % PARSER_RESET_INTERVAL === 0) {
-        resetParser(language);
+        // Periodic parser reset to reclaim WASM heap memory
+        const count = (parseCounts.get(language) ?? 0) + 1;
+        parseCounts.set(language, count);
+        if (count % PARSER_RESET_INTERVAL === 0) {
+          resetParser(language);
+        }
+
+        parentPort!.postMessage({ type: "parse-result", id, result });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+
+        // WASM memory errors leave the module in a corrupted state — all
+        // subsequent parses would also fail (cascading failures). Crash the
+        // worker so the main thread spawns a fresh one with a clean heap.
+        if (
+          message.includes("memory access out of bounds") ||
+          message.includes("out of memory")
+        ) {
+          process.exit(1);
+        }
+
+        parentPort!.postMessage({
+          type: "parse-result",
+          id,
+          result: {
+            nodes: [],
+            edges: [],
+            unresolvedReferences: [],
+            errors: [
+              {
+                message: `Parse worker error: ${message}`,
+                filePath: filePath!,
+                severity: "error",
+                code: "parse_error",
+              },
+            ],
+            durationMs: 0,
+          } satisfies ExtractionResult,
+        });
       }
-
-      parentPort!.postMessage({ type: 'parse-result', id, result });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      // WASM memory errors leave the module in a corrupted state — all
-      // subsequent parses would also fail (cascading failures). Crash the
-      // worker so the main thread spawns a fresh one with a clean heap.
-      if (message.includes('memory access out of bounds') || message.includes('out of memory')) {
-        process.exit(1);
-      }
-
-      parentPort!.postMessage({
-        type: 'parse-result',
-        id,
-        result: {
-          nodes: [],
-          edges: [],
-          unresolvedReferences: [],
-          errors: [{ message: `Parse worker error: ${message}`, filePath: filePath!, severity: 'error', code: 'parse_error' }],
-          durationMs: 0,
-        } satisfies ExtractionResult,
-      });
+    } else if (msg.type === "shutdown") {
+      // 关闭 worker
+      parentPort!.postMessage({ type: "shutdown-ack" });
     }
-  } else if (msg.type === 'shutdown') {
-    parentPort!.postMessage({ type: 'shutdown-ack' });
-  }
-});
+  },
+);

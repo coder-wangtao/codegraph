@@ -808,13 +808,16 @@ export class ExtractionOrchestrator {
     }
 
     function attachWorkerHandlers(w: import("worker_threads").Worker): void {
+      // 给 worker 注册 3 个事件：
       w.on(
         "message",
         (msg: { type: string; id?: number; result?: ExtractionResult }) => {
+          // 正常结果
           if (msg.type === "parse-result" && msg.id !== undefined) {
             const pending = pendingParses.get(msg.id);
             if (pending) {
               clearTimeout(pending.timer);
+              // 找到对应的“未完成任务
               pendingParses.delete(msg.id);
               pending.resolve(msg.result!);
             }
@@ -850,6 +853,7 @@ export class ExtractionOrchestrator {
       // Load grammars in the new worker
       await new Promise<void>((resolve, reject) => {
         parseWorker!.once("message", (msg: { type: string }) => {
+          //只监听第一个message
           if (msg.type === "grammars-loaded") resolve();
           else reject(new Error(`Unexpected message: ${msg.type}`));
         });
@@ -863,7 +867,6 @@ export class ExtractionOrchestrator {
     }
 
     if (WorkerClass) {
-      //TODO:tomorrow
       await ensureWorker();
     }
 
@@ -902,6 +905,9 @@ export class ExtractionOrchestrator {
       // This destroys the WASM linear memory (which can grow but never shrink)
       // and starts a fresh worker with a clean heap.
       if (workerParseCount >= WORKER_RECYCLE_INTERVAL) {
+        // 这段代码是 Worker 线程的定期「换血」：在发起下一次解析之前，
+        // 如果当前 Worker 已经解析过 250 个文件，就先 terminate 掉旧 Worker，
+        // 下次解析时 ensureWorker() 会 spawn 一个新 Worker，从而释放 tree-sitter WASM 占用的内存。
         await recycleWorker();
       }
 
@@ -910,6 +916,8 @@ export class ExtractionOrchestrator {
       workerParseCount++;
 
       // Scale timeout for large files: base 10s + 10s per 100KB
+      // 为单次 Worker 解析计算动态超时时间。Worker 若在 timeoutMs 内没回 parse-result，
+      // 主线程会 reject 该 Promise，并 terminate 卡住的 Worker，避免整个索引任务一直挂死。
       const timeoutMs =
         PARSE_TIMEOUT_MS + Math.floor(content.length / 100_000) * 10_000;
 
@@ -936,6 +944,7 @@ export class ExtractionOrchestrator {
       });
     }
 
+    //执行parse
     for (let i = 0; i < files.length; i += FILE_IO_BATCH_SIZE) {
       if (signal?.aborted) {
         if (parseWorker)
@@ -1454,6 +1463,7 @@ export class ExtractionOrchestrator {
   /**
    * Store extraction result in database
    */
+  // 把 nodes、edges、未解析引用和 file 元数据持久化到 .codegraph/ 数据库。
   private storeExtractionResult(
     filePath: string,
     content: string,
