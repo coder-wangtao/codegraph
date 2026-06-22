@@ -34,23 +34,23 @@
  * regressing #277 (orphaned daemons on host SIGKILL).
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { spawn, StdioOptions } from 'child_process';
-import { findNearestCodeGraphRoot } from '../index';
-import { getCodeGraphDir } from '../directory';
-import { StdioTransport } from './transport';
-import { MCPEngine } from './engine';
-import { MCPSession } from './session';
+import * as fs from "fs";
+import * as path from "path";
+import { spawn, StdioOptions } from "child_process";
+import { findNearestCodeGraphRoot } from "../index";
+import { getCodeGraphDir } from "../directory";
+import { StdioTransport } from "./transport";
+import { MCPEngine } from "./engine";
+import { MCPSession } from "./session";
 import {
   Daemon,
   clearStaleDaemonLock,
   isProcessAlive,
   tryAcquireDaemonLock,
-} from './daemon';
-import { runProxy } from './proxy';
-import { getDaemonSocketPath } from './daemon-paths';
-import { HOST_PPID_ENV } from '../extraction/wasm-runtime-flags';
+} from "./daemon";
+import { runProxy } from "./proxy";
+import { getDaemonSocketPath } from "./daemon-paths";
+import { HOST_PPID_ENV } from "../extraction/wasm-runtime-flags";
 
 /**
  * How often to poll `process.ppid` to detect parent process death (see #277).
@@ -65,7 +65,8 @@ const DEFAULT_PPID_POLL_MS = 5000;
  * `serve --mcp` invocation is a launcher that connects-or-spawns; with it, the
  * process IS the daemon and must never try to spawn another (infinite spawn).
  */
-const DAEMON_INTERNAL_ENV = 'CODEGRAPH_DAEMON_INTERNAL';
+// 这个环境变量用来标记：“我已经是 daemon 了”，避免程序自己无限启动自己。
+const DAEMON_INTERNAL_ENV = "CODEGRAPH_DAEMON_INTERNAL";
 
 /**
  * Retries for the detached daemon arbitrating the O_EXCL lock against a racing
@@ -92,7 +93,7 @@ const DAEMON_CONNECT_RETRY_DELAY_MS = 100;
  * non-numeric or negative falls back to the default.
  */
 function parsePpidPollMs(raw: string | undefined): number {
-  if (raw === undefined || raw === '') return DEFAULT_PPID_POLL_MS;
+  if (raw === undefined || raw === "") return DEFAULT_PPID_POLL_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return DEFAULT_PPID_POLL_MS;
   if (parsed < 0) return DEFAULT_PPID_POLL_MS;
@@ -107,23 +108,25 @@ function parsePpidPollMs(raw: string | undefined): number {
  * i.e. already orphaned), so the watchdog doesn't latch onto init.
  */
 function parseHostPpid(raw: string | undefined): number | null {
-  if (raw === undefined || raw === '') return null;
+  if (raw === undefined || raw === "") return null;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 1) return null;
   return parsed;
 }
 
 /** Whether `CODEGRAPH_NO_DAEMON` was set to a truthy value. */
+// 当前进程能不能运行 daemon 模式
 function daemonOptOutSet(): boolean {
   const raw = process.env.CODEGRAPH_NO_DAEMON;
   if (!raw) return false;
-  return raw !== '0' && raw.toLowerCase() !== 'false';
+  return raw !== "0" && raw.toLowerCase() !== "false";
 }
 
 /** Whether this process was spawned to BE the detached daemon. */
+// 当前进程是不是被标记为daemon本体
 function daemonInternalSet(): boolean {
   const raw = process.env[DAEMON_INTERNAL_ENV];
-  return !!raw && raw !== '0' && raw.toLowerCase() !== 'false';
+  return !!raw && raw !== "0" && raw.toLowerCase() !== "false";
 }
 
 /**
@@ -143,7 +146,11 @@ function resolveDaemonRoot(explicitPath: string | null): string | null {
   const candidate = explicitPath ?? process.cwd();
   const root = findNearestCodeGraphRoot(candidate);
   if (!root) return null;
-  try { return fs.realpathSync(root); } catch { return root; }
+  try {
+    return fs.realpathSync(root);
+  } catch {
+    return root;
+  }
 }
 
 /**
@@ -162,33 +169,37 @@ function spawnDetachedDaemon(root: string): void {
   if (!scriptPath) {
     // No resolvable CLI entry point to re-invoke — let the caller fall back to
     // direct mode rather than spawn something broken.
-    throw new Error('cannot resolve CLI script path to spawn the daemon');
+    throw new Error("cannot resolve CLI script path to spawn the daemon");
   }
 
   let logFd: number | null = null;
-  let stdio: StdioOptions = 'ignore';
+  let stdio: StdioOptions = "ignore";
   try {
-    logFd = fs.openSync(path.join(getCodeGraphDir(root), 'daemon.log'), 'a');
-    stdio = ['ignore', logFd, logFd];
+    logFd = fs.openSync(path.join(getCodeGraphDir(root), "daemon.log"), "a");
+    stdio = ["ignore", logFd, logFd];
   } catch {
-    stdio = 'ignore'; // no log file — discard daemon output rather than fail
+    stdio = "ignore"; // no log file — discard daemon output rather than fail
   }
   try {
     const child = spawn(
       process.execPath,
-      [...process.execArgv, scriptPath, 'serve', '--mcp', '--path', root],
+      [...process.execArgv, scriptPath, "serve", "--mcp", "--path", root],
       {
         detached: true,
         stdio,
         windowsHide: true,
-        env: { ...process.env, [DAEMON_INTERNAL_ENV]: '1' },
+        env: { ...process.env, [DAEMON_INTERNAL_ENV]: "1" },
       },
     );
     child.unref();
   } finally {
     // The child holds its own dup of the log fd now; the launcher doesn't need it.
     if (logFd !== null) {
-      try { fs.closeSync(logFd); } catch { /* ignore */ }
+      try {
+        fs.closeSync(logFd);
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
@@ -218,7 +229,7 @@ export class MCPServer {
   private hostPpid: number | null = parseHostPpid(process.env[HOST_PPID_ENV]);
   // Idempotency guard for stop().
   private stopped = false;
-  private mode: 'unstarted' | 'direct' | 'proxy' | 'daemon' = 'unstarted';
+  private mode: "unstarted" | "direct" | "proxy" | "daemon" = "unstarted";
 
   constructor(projectPath?: string) {
     this.projectPath = projectPath || null;
@@ -241,38 +252,41 @@ export class MCPServer {
     // The detached daemon process itself. Checked before the opt-out so the
     // daemon honors the same env it was spawned with (it never sets NO_DAEMON).
     if (daemonInternalSet()) {
+      //启动 daemon 进程服务
       return this.startDaemonProcess();
     }
 
     // Direct mode if the user opted out. Setting the env var is sufficient to
     // get the pre-#411 single-process behavior.
     if (daemonOptOutSet()) {
-      return this.startDirect('CODEGRAPH_NO_DAEMON set');
+      return this.startDirect("CODEGRAPH_NO_DAEMON set");
     }
 
     const root = resolveDaemonRoot(this.projectPath);
     if (!root) {
       // No initialized project found — daemon mode has nowhere to put its
       // socket. The fresh-checkout / outside-project case; behave as before.
-      return this.startDirect('no .codegraph/ root found');
+      return this.startDirect("no .codegraph/ root found");
     }
 
     try {
       const mode = await this.connectOrSpawnDaemon(root);
-      if (mode === 'fallback') {
-        return this.startDirect('daemon unavailable; fallback to direct');
+      if (mode === "fallback") {
+        return this.startDirect("daemon unavailable; fallback to direct");
       }
       // 'proxy': connectOrSpawnDaemon ran the stdio↔socket pipe to completion
       // (it only returns once the host disconnected). The process is now
       // expected to terminate naturally — the proxy installed its own watchdog.
-      this.mode = 'proxy';
+      this.mode = "proxy";
       return;
     } catch (err) {
       // Belt-and-braces: if anything throws inside the daemon machinery,
       // never wedge the user — fall back to a working direct-mode session.
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[CodeGraph MCP] Daemon path failed (${msg}); falling back to direct mode.\n`);
-      return this.startDirect('daemon path threw');
+      process.stderr.write(
+        `[CodeGraph MCP] Daemon path failed (${msg}); falling back to direct mode.\n`,
+      );
+      return this.startDirect("daemon path threw");
     }
   }
 
@@ -289,7 +303,7 @@ export class MCPServer {
       this.ppidWatchdog = null;
     }
     if (this.daemon) {
-      void this.daemon.stop('stop()');
+      void this.daemon.stop("stop()");
       // Daemon.stop calls process.exit; nothing else to do.
       return;
     }
@@ -305,6 +319,7 @@ export class MCPServer {
   }
 
   /** Single-process stdio MCP session — the pre-issue-#411 code path. */
+  // 这是“轻量版运行模式”：不启动守护进程，直接把当前进程当服务端用。
   private async startDirect(reason: string): Promise<void> {
     if (reason && process.env.CODEGRAPH_MCP_DEBUG) {
       process.stderr.write(`[CodeGraph MCP] Direct mode: ${reason}.\n`);
@@ -325,10 +340,10 @@ export class MCPServer {
     // Detect parent-process death — same logic as pre-refactor. When stdin
     // closes we go through StdioTransport's `process.exit(0)` already, but
     // SIGKILL of the parent doesn't reliably close stdin on Linux (#277).
-    process.stdin.on('end', () => this.stop());
-    process.stdin.on('close', () => this.stop());
+    process.stdin.on("end", () => this.stop());
+    process.stdin.on("close", () => this.stop());
 
-    this.mode = 'direct';
+    this.mode = "direct";
     this.installSignalHandlers();
     this.installPpidWatchdog();
   }
@@ -342,16 +357,18 @@ export class MCPServer {
    * No PPID watchdog and no stdin handlers: the daemon is detached on purpose
    * and reaps itself via client-refcount + idle timeout (see {@link Daemon}).
    */
+  // 启动一个“全局唯一”的 daemon（守护进程），并通过文件锁 + PID 检测 + 重试机制，确保同一时间只有一个实例在运行。
   private async startDaemonProcess(): Promise<void> {
-    const root = resolveDaemonRoot(this.projectPath) ?? this.projectPath ?? process.cwd();
+    const root =
+      resolveDaemonRoot(this.projectPath) ?? this.projectPath ?? process.cwd();
     for (let attempt = 0; attempt < TAKEOVER_MAX_RETRIES; attempt++) {
       const lock = tryAcquireDaemonLock(root);
 
-      if (lock.kind === 'acquired') {
+      if (lock.kind === "acquired") {
         const daemon = new Daemon(root);
         await daemon.start();
         this.daemon = daemon;
-        this.mode = 'daemon';
+        this.mode = "daemon";
         return; // the net.Server keeps the process alive
       }
 
@@ -360,18 +377,22 @@ export class MCPServer {
       const existing = lock.existing;
       if (existing && existing.pid > 0 && isProcessAlive(existing.pid)) {
         process.stderr.write(
-          `[CodeGraph daemon] Another daemon (pid ${existing.pid}) already holds the lock; exiting.\n`
+          `[CodeGraph daemon] Another daemon (pid ${existing.pid}) already holds the lock; exiting.\n`,
         );
         process.exit(0);
       }
 
       // Holder is dead (or the record is unreadable) — clear it (pid-verified,
       // so we never delete a live daemon's lock) and retry the acquire.
+      // 锁存在，但进程死了（僵尸锁）
       clearStaleDaemonLock(lock.pidPath, existing?.pid);
+      // 等一会儿再抢
       await sleep(TAKEOVER_RETRY_DELAY_MS);
     }
 
-    process.stderr.write('[CodeGraph daemon] Could not acquire the daemon lock; exiting.\n');
+    process.stderr.write(
+      "[CodeGraph daemon] Could not acquire the daemon lock; exiting.\n",
+    );
     process.exit(0);
   }
 
@@ -380,15 +401,17 @@ export class MCPServer {
    * reachable. Returns 'proxy' once the proxied session has run to completion
    * (the host disconnected), or 'fallback' if the caller should run in-process.
    */
-  private async connectOrSpawnDaemon(root: string): Promise<'proxy' | 'fallback'> {
+  private async connectOrSpawnDaemon(
+    root: string,
+  ): Promise<"proxy" | "fallback"> {
     const socketPath = getDaemonSocketPath(root);
 
     // Fast path: a daemon may already be listening. On success runProxy pipes
     // stdio until the host disconnects, so a 'proxied' outcome means this
     // process has finished its entire job.
     let probe = await runProxy(socketPath);
-    if (probe.outcome === 'proxied') return 'proxy';
-    if (probe.reason === 'version mismatch') return 'fallback';
+    if (probe.outcome === "proxied") return "proxy";
+    if (probe.reason === "version mismatch") return "fallback";
 
     // No reachable daemon — spawn one (detached) and wait for it to bind.
     spawnDetachedDaemon(root);
@@ -396,18 +419,18 @@ export class MCPServer {
     for (let attempt = 0; attempt < DAEMON_CONNECT_MAX_RETRIES; attempt++) {
       await sleep(DAEMON_CONNECT_RETRY_DELAY_MS);
       probe = await runProxy(socketPath);
-      if (probe.outcome === 'proxied') return 'proxy';
-      if (probe.reason === 'version mismatch') return 'fallback';
+      if (probe.outcome === "proxied") return "proxy";
+      if (probe.reason === "version mismatch") return "fallback";
     }
 
     // Daemon never came up in time — run in-process so the user is never blocked.
-    return 'fallback';
+    return "fallback";
   }
 
   /** Standard SIGINT/SIGTERM handlers that route to our `stop()` (direct mode). */
   private installSignalHandlers(): void {
-    process.on('SIGINT', () => this.stop());
-    process.on('SIGTERM', () => this.stop());
+    process.on("SIGINT", () => this.stop());
+    process.on("SIGTERM", () => this.stop());
   }
 
   /**
@@ -416,7 +439,7 @@ export class MCPServer {
    * {@link runProxy}. So this only ever runs for an in-process direct session.
    */
   private installPpidWatchdog(): void {
-    if (this.mode !== 'direct') return;
+    if (this.mode !== "direct") return;
     const pollMs = parsePpidPollMs(process.env.CODEGRAPH_PPID_POLL_MS);
     if (pollMs <= 0) return;
     this.ppidWatchdog = setInterval(() => {
@@ -428,7 +451,7 @@ export class MCPServer {
           ? `ppid ${this.originalPpid} -> ${current}`
           : `host pid ${this.hostPpid} exited`;
         process.stderr.write(
-          `[CodeGraph MCP] Parent process exited (${reason}); shutting down.\n`
+          `[CodeGraph MCP] Parent process exited (${reason}); shutting down.\n`,
         );
         this.stop();
       }
@@ -442,12 +465,14 @@ function sleep(ms: number): Promise<void> {
   // may be between processes — no socket bound yet, no transport, no listener
   // pinning the event loop. An unref'd timer would let Node drain the loop and
   // exit silently before we get a chance to try again.
-  return new Promise((resolve) => { setTimeout(resolve, ms); });
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 // Export for use in CLI
-export { StdioTransport } from './transport';
-export { tools, ToolHandler } from './tools';
+export { StdioTransport } from "./transport";
+export { tools, ToolHandler } from "./tools";
 // Surface a few daemon-mode bits for tests + diagnostics.
-export { Daemon } from './daemon';
-export { CodeGraphPackageVersion } from './version';
+export { Daemon } from "./daemon";
+export { CodeGraphPackageVersion } from "./version";

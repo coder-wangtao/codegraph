@@ -259,6 +259,7 @@ function collectGitFiles(
   // Without this, monorepos using submodules index 0 files. (See issue #147.)
   // Note: --recurse-submodules only supports -c/--cached and --stage modes — it
   // can't be combined with -o, so untracked files are gathered separately below.
+  // 获取已跟踪（commit 进 Git 的）文件
   const tracked = execFileSync(
     "git",
     ["ls-files", "-c", "--recurse-submodules"], // 已跟踪（commit 进 Git 的）文件
@@ -274,6 +275,7 @@ function collectGitFiles(
   // Untracked files (submodules manage their own untracked state). Embedded git
   // repos surface here as a single "subdir/" entry that git refuses to descend
   // into — recurse into those as their own repos so their source gets indexed.
+  // 获取未跟踪（未 commit 进 Git 的）文件
   const untracked = execFileSync(
     "git",
     ["ls-files", "-o", "--exclude-standard"], // 工作区里未跟踪的文件
@@ -320,7 +322,7 @@ function getGitVisibleFiles(rootDir: string): Set<string> | null {
     if (path.resolve(gitRoot) !== path.resolve(rootDir)) {
       try {
         // git check-ignore exits 0 if the path IS ignored, 1 if not
-        // git check-ignore -q <rootDir>
+        // git check-ignore -q <rootDir> : 判断 rootDir 是否被父 repo 的 .gitignore 忽略
         execFileSync("git", ["check-ignore", "-q", path.resolve(rootDir)], {
           cwd: rootDir,
           encoding: "utf-8",
@@ -329,6 +331,7 @@ function getGitVisibleFiles(rootDir: string): Set<string> | null {
           windowsHide: true,
         });
         // Directory is gitignored by parent repo — fall back to filesystem walk
+        // 如果 rootDir 被 ignore：直接 fallback 文件系统扫描
         return null;
       } catch {
         // Not ignored — safe to use git ls-files
@@ -412,6 +415,7 @@ function getGitChangedFiles(rootDir: string): GitChanges | null {
  * levels), then keeps files with a supported source extension. For non-git
  * projects, falls back to a filesystem walk that parses .gitignore itself.
  */
+// 所有“源码文件路径列表”（已过滤 .gitignore + symlink + 非源码文件）
 export function scanDirectory(
   rootDir: string,
   onProgress?: (current: number, file: string) => void,
@@ -1585,6 +1589,7 @@ export class ExtractionOrchestrator {
     // Removals: tracked in the DB but no longer a present source file. Check the
     // filesystem directly — `scanDirectory` (via `git ls-files`) still lists a
     // file deleted from disk but not yet staged, so set membership alone misses it.
+    // 文件被删除了
     for (const tracked of trackedFiles) {
       if (
         !currentSet.has(tracked.path) ||
@@ -1597,8 +1602,8 @@ export class ExtractionOrchestrator {
 
     // Adds / modifications.
     for (const filePath of currentFiles) {
-      const fullPath = path.join(this.rootDir, filePath);
-      const tracked = trackedMap.get(filePath);
+      const fullPath = path.join(this.rootDir, filePath); //新的
+      const tracked = trackedMap.get(filePath); //旧的
 
       // Cheap pre-filter: an already-indexed file whose size AND mtime both match
       // the DB is unchanged — skip it without reading or hashing. (A content
@@ -1606,12 +1611,14 @@ export class ExtractionOrchestrator {
       // incremental tool accepts; `index --force` is the escape hatch. Git bumps
       // mtime on every file it writes during checkout/merge, so pulls are caught.)
       if (tracked) {
+        // 如果旧的文件存在
         try {
           const stat = fs.statSync(fullPath);
           if (
-            stat.size === tracked.size &&
-            Math.floor(stat.mtimeMs) === Math.floor(tracked.modifiedAt)
+            stat.size === tracked.size && // 大小相同
+            Math.floor(stat.mtimeMs) === Math.floor(tracked.modifiedAt) // 修改时间相同
           ) {
+            // 跳过，不读取和哈希
             continue;
           }
         } catch (error) {
@@ -1637,10 +1644,12 @@ export class ExtractionOrchestrator {
       const contentHash = hashContent(content);
 
       if (!tracked) {
+        // 如果旧的文件不存在，相当于新增
         filesToIndex.push(filePath);
         changedFilePaths.push(filePath);
         filesAdded++;
       } else if (tracked.contentHash !== contentHash) {
+        // 如果旧的文件存在，且内容不同，相当于修改
         filesToIndex.push(filePath);
         changedFilePaths.push(filePath);
         filesModified++;

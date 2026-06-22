@@ -65,18 +65,28 @@ function unquote(s: string): string {
  * Always returns a value; never throws.
  */
 export function parseQuery(raw: string): ParsedQuery {
+  // 把“搜索字符串 DSL”解析成「结构化过滤 + 全文搜索文本」的混合查询器。
   const out: ParsedQuery = {
-    text: "",
-    kinds: [],
-    languages: [],
-    pathFilters: [],
-    nameFilters: [],
+    text: "", // 普通搜索文本（给全文检索/模糊搜索）
+    kinds: [], // kind: 过滤
+    languages: [], // lang: / language: 过滤
+    pathFilters: [], // path: 硬过滤（文件路径子串）
+    nameFilters: [], // name: 硬过滤（符号名子串）
   };
 
+  // kind:function lang:ts hello world path:"src/utils"
+  // 在 TypeScript 项目中，查找 src/utils 目录下的函数（function），并且代码内容中包含 “hello world”。
+  // SELECT *
+  // FROM code
+  // WHERE kind = "function"
+  //   AND lang = "ts"
+  //   AND path CONTAINS "src/utils"
+  //   AND text MATCHES "hello world"
   // Tokenise on whitespace, preserving quoted spans as part of the
   // current token. Quotes can appear at the start (`"…"`) OR mid-token
   // (`path:"…"`); in both cases everything from the opening `"` to the
   // matching `"` is included in the token, whitespace and all.
+  // TODO:tokenize
   const tokens: string[] = [];
   let i = 0;
   while (i < raw.length) {
@@ -155,6 +165,7 @@ export function parseQuery(raw: string): ParsedQuery {
  * Pure DP, O(min(len(a), len(b))) memory. Compares case-folded inputs;
  * callers should pass `lowercase(name)` strings.
  */
+// 计算两个字符串的编辑距离
 export function boundedEditDistance(
   a: string,
   b: string,

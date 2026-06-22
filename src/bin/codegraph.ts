@@ -164,6 +164,7 @@ function main() {
     gray: (s: string) => `${colors.gray}${s}${colors.reset}`,
   };
 
+  //TODO: OK
   program
     .name("codegraph")
     .description("Code intelligence and knowledge graph for any codebase")
@@ -477,6 +478,7 @@ function main() {
   /**
    * codegraph init [path]初始化
    */
+  //TODO: OK
   program
     .command("init [path]")
     .description(
@@ -562,6 +564,7 @@ function main() {
   /**
    * codegraph uninit [path] 卸载
    */
+  //TODO: OK
   program
     .command("uninit [path]")
     .description(
@@ -632,6 +635,7 @@ function main() {
   /**
    * codegraph index [path] (项目所有的文件建立索引)
    */
+  //TODO: OK
   program
     .command("index [path]")
     .description("Index all files in the project")
@@ -710,6 +714,7 @@ function main() {
   /**
    * codegraph sync [path] (同步变化)
    */
+  //TODO: OK
   program
     .command("sync [path]")
     .description("Sync changes since last index")
@@ -786,6 +791,7 @@ function main() {
   /**
    * codegraph status [path] ()
    */
+  //TODO: OK
   program
     .command("status [path]")
     .description("Show index status and statistics")
@@ -946,6 +952,7 @@ function main() {
   /**
    * codegraph query <search> (搜索 代码)
    */
+  //TODO: OK
   program
     .command("query <search>")
     .description("Search for symbols in the codebase")
@@ -975,7 +982,7 @@ function main() {
           const cg = await CodeGraph.open(projectPath);
 
           const limit = parseInt(options.limit || "10", 10);
-          
+
           const rawResults = cg.searchNodes(search, {
             limit,
             kinds: options.kind ? [options.kind as any] : undefined,
@@ -1035,6 +1042,7 @@ function main() {
   /**
    * codegraph files [path] (显示项目文件结构)
    */
+  //TODO: OK
   program
     .command("files")
     .description("Show project file structure from the index")
@@ -1074,6 +1082,7 @@ function main() {
           }
 
           // Filter by path prefix
+          // codegraph files --filter src/utils 只显示 src/utils 下的文件
           if (options.filter) {
             const filter = options.filter;
             files = files.filter(
@@ -1083,6 +1092,7 @@ function main() {
           }
 
           // Filter by glob pattern
+          // codegraph files --pattern "**/*.ts" 只显示 .ts 文件
           if (options.pattern) {
             const regex = globToRegex(options.pattern);
             files = files.filter((f) => regex.test(f.path));
@@ -1274,9 +1284,9 @@ function main() {
    */
   program
     .command("context <task>")
-    .description("Build context for a task (outputs markdown)")
-    .option("-p, --path <path>", "Project path")
-    .option("-n, --max-nodes <number>", "Maximum nodes to include", "50")
+    .description("Build context for a task (outputs markdown)") //构建一个任务构建上下文
+    .option("-p, --path <path>", "Project path") 
+    .option("-n, --max-nodes <number>", "Maximum nodes to include", "50") //最多附几段源代码
     .option("-c, --max-code <number>", "Maximum code blocks", "10")
     .option("--no-code", "Exclude code blocks")
     .option(
@@ -1983,6 +1993,7 @@ function main() {
       },
     );
 
+  //TODO: OK
   /**
    * codegraph install
    */
@@ -2081,6 +2092,7 @@ function main() {
    * `--target` subset). Prompts global-vs-local when not given. Does NOT
    * delete the `.codegraph/` index — that's `codegraph uninit`.
    */
+  //TODO: OK
   program
     .command("uninstall")
     .description(

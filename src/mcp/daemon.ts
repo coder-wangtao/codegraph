@@ -40,20 +40,20 @@
  *   - The MCP protocol state machine — that's `./session.ts`.
  */
 
-import * as fs from 'fs';
-import * as net from 'net';
-import * as path from 'path';
-import { MCPEngine } from './engine';
-import { MCPSession } from './session';
-import { SocketTransport } from './transport';
+import * as fs from "fs";
+import * as net from "net";
+import * as path from "path";
+import { MCPEngine } from "./engine";
+import { MCPSession } from "./session";
+import { SocketTransport } from "./transport";
 import {
   DaemonLockInfo,
   decodeLockInfo,
   encodeLockInfo,
   getDaemonPidPath,
   getDaemonSocketPath,
-} from './daemon-paths';
-import { CodeGraphPackageVersion } from './version';
+} from "./daemon-paths";
+import { CodeGraphPackageVersion } from "./version";
 
 /** Default idle linger after the last client disconnects. */
 const DEFAULT_IDLE_TIMEOUT_MS = 300_000;
@@ -69,9 +69,9 @@ const MAX_HELLO_LINE_BYTES = 4096;
  */
 export interface DaemonHello {
   codegraph: string; // package version (must match the proxy's own version)
-  pid: number;       // daemon pid (informational; for `ps` debugging)
+  pid: number; // daemon pid (informational; for `ps` debugging)
   socketPath: string; // echoed back so the proxy can log it
-  protocol: 1;       // bump if the hello shape changes
+  protocol: 1; // bump if the hello shape changes
 }
 
 export interface DaemonStartResult {
@@ -128,18 +128,28 @@ export class Daemon {
     // Stale socket file (left over from a SIGKILL'd previous daemon) will
     // wedge `listen` with EADDRINUSE. We arrived here holding the lockfile,
     // which means there's no live daemon, so it's safe to clear.
-    if (process.platform !== 'win32') {
-      try { fs.unlinkSync(this.socketPath); } catch { /* not-exists is fine */ }
+    if (process.platform !== "win32") {
+      try {
+        fs.unlinkSync(this.socketPath);
+      } catch {
+        /* not-exists is fine */
+      }
     }
 
     await new Promise<void>((resolve, reject) => {
-      const server = net.createServer((socket) => this.handleConnection(socket));
-      server.once('error', (err) => reject(err));
+      const server = net.createServer((socket) =>
+        this.handleConnection(socket),
+      );
+      server.once("error", (err) => reject(err));
       server.listen(this.socketPath, () => {
         // POSIX: tighten permissions to user-only — the socket lives under
         // `.codegraph/`, which is git-ignored but may be on a shared FS.
-        if (process.platform !== 'win32') {
-          try { fs.chmodSync(this.socketPath, 0o600); } catch { /* best-effort */ }
+        if (process.platform !== "win32") {
+          try {
+            fs.chmodSync(this.socketPath, 0o600);
+          } catch {
+            /* best-effort */
+          }
         }
         this.server = server;
         resolve();
@@ -154,7 +164,7 @@ export class Daemon {
     };
 
     process.stderr.write(
-      `[CodeGraph daemon] Listening on ${this.socketPath} (pid ${process.pid}, v${CodeGraphPackageVersion}). Idle timeout ${this.idleTimeoutMs}ms.\n`
+      `[CodeGraph daemon] Listening on ${this.socketPath} (pid ${process.pid}, v${CodeGraphPackageVersion}). Idle timeout ${this.idleTimeoutMs}ms.\n`,
     );
 
     // No clients yet: arm the idle timer immediately so a daemon that nobody
@@ -162,8 +172,8 @@ export class Daemon {
     // doesn't pin resources forever.
     this.armIdleTimer();
 
-    process.on('SIGINT', () => this.stop('SIGINT'));
-    process.on('SIGTERM', () => this.stop('SIGTERM'));
+    process.on("SIGINT", () => this.stop("SIGINT"));
+    process.on("SIGTERM", () => this.stop("SIGTERM"));
 
     return { socketPath: this.socketPath, lock };
   }
@@ -179,16 +189,22 @@ export class Daemon {
   }
 
   /** Graceful shutdown: close all sessions, the engine, and clean up the lock. */
-  async stop(reason: string = 'stop'): Promise<void> {
+  async stop(reason: string = "stop"): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
     if (this.idleTimer) {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
-    process.stderr.write(`[CodeGraph daemon] Shutting down (${reason}; clients=${this.clients.size}).\n`);
+    process.stderr.write(
+      `[CodeGraph daemon] Shutting down (${reason}; clients=${this.clients.size}).\n`,
+    );
     for (const session of [...this.clients]) {
-      try { session.stop(); } catch { /* best-effort */ }
+      try {
+        session.stop();
+      } catch {
+        /* best-effort */
+      }
     }
     this.clients.clear();
     if (this.server) {
@@ -197,8 +213,12 @@ export class Daemon {
     }
     this.engine.stop();
     this.cleanupLockfile();
-    if (process.platform !== 'win32') {
-      try { fs.unlinkSync(this.socketPath); } catch { /* may already be gone */ }
+    if (process.platform !== "win32") {
+      try {
+        fs.unlinkSync(this.socketPath);
+      } catch {
+        /* may already be gone */
+      }
     }
     process.exit(0);
   }
@@ -212,7 +232,7 @@ export class Daemon {
       socketPath: this.socketPath,
       protocol: 1,
     };
-    socket.write(JSON.stringify(hello) + '\n');
+    socket.write(JSON.stringify(hello) + "\n");
 
     const transport = new SocketTransport(socket);
     const session = new MCPSession(transport, this.engine, {
@@ -241,7 +261,7 @@ export class Daemon {
         this.armIdleTimer();
         return;
       }
-      void this.stop('idle timeout');
+      void this.stop("idle timeout");
     }, this.idleTimeoutMs);
     // Don't keep the event loop alive just for this — the net.Server keeps the
     // loop alive while listening, so the timer still fires; once we stop() the
@@ -260,13 +280,15 @@ export class Daemon {
       if (fs.existsSync(this.pidPath)) {
         // Only remove if it still belongs to us — another daemon may have
         // already taken over while we were shutting down (extremely rare).
-        const raw = fs.readFileSync(this.pidPath, 'utf8');
+        const raw = fs.readFileSync(this.pidPath, "utf8");
         const info = decodeLockInfo(raw);
         if (info && info.pid === process.pid) {
           fs.unlinkSync(this.pidPath);
         }
       }
-    } catch { /* best-effort; we're exiting anyway */ }
+    } catch {
+      /* best-effort; we're exiting anyway */
+    }
   }
 }
 
@@ -276,8 +298,8 @@ export class Daemon {
  * daemon as a proxy, or — if the holder is dead — clear it and retry).
  */
 export type AcquireResult =
-  | { kind: 'acquired'; pidPath: string; info: DaemonLockInfo }
-  | { kind: 'taken'; existing: DaemonLockInfo | null; pidPath: string };
+  | { kind: "acquired"; pidPath: string; info: DaemonLockInfo }
+  | { kind: "taken"; existing: DaemonLockInfo | null; pidPath: string };
 
 /**
  * Atomically create the daemon pidfile with its full record already in place.
@@ -299,8 +321,10 @@ export type AcquireResult =
  * Whoever links first wins; everyone else gets EEXIST and reads a complete file.
  * There is no empty-file window at all.
  */
+// 它保证同一时间只有一个进程能成为 daemon，其它进程要么失败，要么读取已有 daemon 信息。
+//
 export function tryAcquireDaemonLock(projectRoot: string): AcquireResult {
-  const pidPath = getDaemonPidPath(projectRoot);
+  const pidPath = getDaemonPidPath(projectRoot); // /.project/.codegraph/daemon.pid
   // Make sure the .codegraph/ directory exists — the daemon may be the first
   // thing to touch it on a fresh-clone-but-already-initialized checkout.
   fs.mkdirSync(path.dirname(pidPath), { recursive: true });
@@ -318,25 +342,35 @@ export function tryAcquireDaemonLock(projectRoot: string): AcquireResult {
   try {
     fs.writeFileSync(tmp, encodeLockInfo(info), { mode: 0o600 });
     try {
+      // 文件硬链接是原子操作（atomic operation）
       fs.linkSync(tmp, pidPath); // atomic + exclusive
       acquired = true;
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      // pidPath 已经存在 → 已经有 daemon 了
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
     }
   } finally {
-    try { fs.unlinkSync(tmp); } catch { /* temp already gone */ }
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      /* temp already gone */
+    }
   }
 
-  if (acquired) return { kind: 'acquired', pidPath, info };
+  // 我是 daemon
+  if (acquired) return { kind: "acquired", pidPath, info };
 
   // Taken. Because the pidfile was link'd atomically it always holds a complete
   // record — `existing` is null only for a genuinely corrupt leftover, never a
   // mid-write race.
   let existing: DaemonLockInfo | null = null;
   try {
-    existing = decodeLockInfo(fs.readFileSync(pidPath, 'utf8'));
-  } catch { /* unreadable lockfile — treat as malformed */ }
-  return { kind: 'taken', existing, pidPath };
+    existing = decodeLockInfo(fs.readFileSync(pidPath, "utf8"));
+  } catch {
+    /* unreadable lockfile — treat as malformed */
+  }
+  //已经有 daemon 了
+  return { kind: "taken", existing, pidPath };
 }
 
 /**
@@ -350,13 +384,17 @@ export function tryAcquireDaemonLock(projectRoot: string): AcquireResult {
  * compare-and-delete: bail if the file now holds a different pid, or any live
  * pid. Returns true when the stale lock is gone (or was already gone).
  */
-export function clearStaleDaemonLock(pidPath: string, expectedDeadPid?: number): boolean {
+export function clearStaleDaemonLock(
+  pidPath: string,
+  expectedDeadPid?: number,
+): boolean {
   try {
-    const raw = fs.readFileSync(pidPath, 'utf8');
+    const raw = fs.readFileSync(pidPath, "utf8");
     const info = decodeLockInfo(raw);
     if (info) {
       // A different pid took over since we read it — not ours to clear.
-      if (expectedDeadPid !== undefined && info.pid !== expectedDeadPid) return false;
+      if (expectedDeadPid !== undefined && info.pid !== expectedDeadPid)
+        return false;
       // Holder is actually alive — never clear a live daemon's lock.
       if (info.pid > 0 && isProcessAlive(info.pid)) return false;
     }
@@ -364,7 +402,7 @@ export function clearStaleDaemonLock(pidPath: string, expectedDeadPid?: number):
     return true;
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
-    if (e.code === 'ENOENT') return true; // already gone
+    if (e.code === "ENOENT") return true; // already gone
     return false;
   }
 }
@@ -380,14 +418,14 @@ export function isProcessAlive(pid: number): boolean {
     return true;
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
-    if (e.code === 'EPERM') return true; // exists, just not ours to signal
+    if (e.code === "EPERM") return true; // exists, just not ours to signal
     return false;
   }
 }
 
 function resolveIdleTimeoutMs(): number {
   const raw = process.env.CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS;
-  if (raw === undefined || raw === '') return DEFAULT_IDLE_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return DEFAULT_IDLE_TIMEOUT_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_IDLE_TIMEOUT_MS;
   return Math.floor(parsed);

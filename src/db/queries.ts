@@ -825,12 +825,14 @@ export class QueryBuilder {
     const languages = mergedLanguages;
 
     // First try FTS5 with prefix matching
+    //根据text语义搜索
     let results = text
       ? this.searchNodesFTS(text, { kinds, languages, limit, offset })
       : // Over-fetch by 5× when running filter-only (no text). The
         // post-scoring path: + name: filters can be very selective, so
         // a smaller multiplier risks returning fewer than `limit`
         // results despite the DB having plenty of matches.
+        //不根据语义直接查询所有
         this.searchAllByFilters({ kinds, languages, limit: limit * 5 });
 
     // If no FTS results, try LIKE-based substring search
@@ -853,9 +855,11 @@ export class QueryBuilder {
     // Use the max BM25 score as the base so the nameMatchBonus (exact=30 vs
     // prefix=20) actually differentiates them after rescoring.
     if (results.length > 0 && query) {
+      // 用 SQL 精确匹配补充 BM25 可能漏掉的“短精确名字”
       const existingIds = new Set(results.map((r) => r.node.id));
       const maxFtsScore = Math.max(...results.map((r) => r.score));
       const terms = query.split(/\s+/).filter((t) => t.length >= 2);
+
       for (const term of terms) {
         let sql = "SELECT * FROM nodes WHERE name = ? COLLATE NOCASE";
         const params: (string | number)[] = [term];
@@ -885,9 +889,9 @@ export class QueryBuilder {
         ...r,
         score:
           r.score +
-          kindBonus(r.node.kind) +
-          scorePathRelevance(r.node.filePath, scoringQuery) +
-          nameMatchBonus(r.node.name, scoringQuery),
+          kindBonus(r.node.kind) + // 根据类型加分
+          scorePathRelevance(r.node.filePath, scoringQuery) + // 根据路径加分
+          nameMatchBonus(r.node.name, scoringQuery), // 名字匹配加分
       }));
       results.sort((a, b) => b.score - a.score);
       // Trim to requested limit after rescoring
@@ -900,6 +904,7 @@ export class QueryBuilder {
     // path/name as a soft signal; the explicit filters here are a hard
     // gate. Done last so the FTS limit fetched plenty of candidates to
     // narrow from.
+    // 最后严格过滤
     if (pathFilters.length > 0) {
       const lowered = pathFilters.map((p) => p.toLowerCase());
       results = results.filter((r) => {
@@ -924,6 +929,14 @@ export class QueryBuilder {
    * candidates ordered by name; the caller's filter pass narrows to
    * what was asked for.
    */
+
+  // SELECT * FROM nodes
+  // WHERE 1=1
+  // AND kind IN ('function')
+  // AND language IN ('ts')
+  // ORDER BY name
+  // LIMIT 3
+
   private searchAllByFilters(options: {
     kinds?: NodeKind[];
     languages?: Language[];
@@ -954,6 +967,7 @@ export class QueryBuilder {
    * scan is O(distinct-name-count) which is far smaller than total
    * node count on any real codebase.
    */
+  // 当 FTS / LIKE 都没结果时，通过编辑距离（edit distance）找“拼写最像”的符号名，再去数据库精确查 node
   private searchNodesFuzzy(
     text: string,
     options: { kinds?: NodeKind[]; languages?: Language[]; limit: number },
@@ -1013,6 +1027,17 @@ export class QueryBuilder {
   /**
    * FTS5 search with prefix matching
    */
+  /*
+    kind:function lang:ts auth login path:"src/server" user session::create
+    SELECT nodes.*, bm25(nodes_fts, 0, 20, 5, 1, 2) as score
+    FROM nodes_fts
+    JOIN nodes ON nodes_fts.id = nodes.id
+    WHERE nodes_fts MATCH '"user"* OR "session"* OR "create"*'
+      AND nodes.kind IN ('function')
+      AND nodes.language IN ('ts')
+    ORDER BY score
+    LIMIT 100 OFFSET 0
+  */
   private searchNodesFTS(
     query: string,
     options: SearchOptions,
@@ -1056,11 +1081,13 @@ export class QueryBuilder {
 
     const params: (string | number)[] = [ftsQuery];
 
+    // kinds 过滤
     if (kinds && kinds.length > 0) {
       sql += ` AND nodes.kind IN (${kinds.map(() => "?").join(",")})`;
       params.push(...kinds);
     }
 
+    // languages 过滤
     if (languages && languages.length > 0) {
       sql += ` AND nodes.language IN (${languages.map(() => "?").join(",")})`;
       params.push(...languages);
@@ -1087,6 +1114,7 @@ export class QueryBuilder {
    * LIKE-based substring search for cases where FTS doesn't match
    * Useful for camelCase matching (e.g., "signIn" finds "signInWithGoogle")
    */
+  // 这个函数用 LIKE 做模糊匹配，并用 CASE 手动实现一个简易排序算法，让“更像的结果排前面”。
   private searchNodesLike(
     query: string,
     options: SearchOptions,
