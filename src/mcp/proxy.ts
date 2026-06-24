@@ -18,11 +18,11 @@
  *     the direct-mode server uses; see issue #277.
  */
 
-import * as fs from 'fs';
-import * as net from 'net';
-import { HOST_PPID_ENV } from '../extraction/wasm-runtime-flags';
-import { DaemonHello, MAX_HELLO_LINE_BYTES } from './daemon';
-import { CodeGraphPackageVersion } from './version';
+import * as fs from "fs";
+import * as net from "net";
+import { HOST_PPID_ENV } from "../extraction/wasm-runtime-flags";
+import { DaemonHello, MAX_HELLO_LINE_BYTES } from "./daemon";
+import { CodeGraphPackageVersion } from "./version";
 
 /** Default poll cadence for the PPID watchdog (same as the direct server). */
 const DEFAULT_PPID_POLL_MS = 5000;
@@ -34,7 +34,7 @@ export interface ProxyResult {
    * `fallback-needed` — the daemon rejected us (version mismatch / unreachable
    * socket) and the caller should run the server in direct mode.
    */
-  outcome: 'proxied' | 'fallback-needed';
+  outcome: "proxied" | "fallback-needed";
   reason?: string;
 }
 
@@ -60,32 +60,32 @@ export async function runProxy(
   // POSIX: refuse to connect to a stale socket file that points at no
   // listening process. `fs.existsSync` is a cheap pre-check; a real
   // ECONNREFUSED below catches the rare "exists but unbound" race.
-  if (process.platform !== 'win32' && !fs.existsSync(socketPath)) {
-    return { outcome: 'fallback-needed', reason: 'socket file missing' };
+  if (process.platform !== "win32" && !fs.existsSync(socketPath)) {
+    return { outcome: "fallback-needed", reason: "socket file missing" };
   }
 
   const socket = net.createConnection(socketPath);
-  socket.setEncoding('utf8');
+  socket.setEncoding("utf8");
 
   const hello = await readHelloLine(socket).catch((err) => {
     socket.destroy();
     return new Error(String(err));
   });
   if (hello instanceof Error) {
-    return { outcome: 'fallback-needed', reason: hello.message };
+    return { outcome: "fallback-needed", reason: hello.message };
   }
 
   if (hello.codegraph !== expectedVersion) {
     process.stderr.write(
       `[CodeGraph MCP] Found a daemon on ${socketPath} but version (${hello.codegraph}) ` +
-      `differs from ours (${expectedVersion}); falling back to direct mode.\n`
+        `differs from ours (${expectedVersion}); falling back to direct mode.\n`,
     );
     socket.destroy();
-    return { outcome: 'fallback-needed', reason: 'version mismatch' };
+    return { outcome: "fallback-needed", reason: "version mismatch" };
   }
 
   process.stderr.write(
-    `[CodeGraph MCP] Attached to shared daemon on ${socketPath} (pid ${hello.pid}, v${hello.codegraph}).\n`
+    `[CodeGraph MCP] Attached to shared daemon on ${socketPath} (pid ${hello.pid}, v${hello.codegraph}).\n`,
   );
 
   startPpidWatchdog(socket);
@@ -102,22 +102,23 @@ export async function runProxy(
  * malicious or broken peer can't OOM us. Times out at 3s — a healthy daemon
  * sends hello immediately on accept.
  */
+// 从 socket 流中读取 daemon 的第一条“握手 JSON”，验证版本和结构，同时确保后续数据不会丢失或错位。
 function readHelloLine(socket: net.Socket): Promise<DaemonHello> {
   return new Promise((resolve, reject) => {
-    let buffer = '';
+    let buffer = "";
     const cleanup = () => {
-      socket.removeListener('data', onData);
-      socket.removeListener('error', onError);
-      socket.removeListener('close', onClose);
+      socket.removeListener("data", onData);
+      socket.removeListener("error", onError);
+      socket.removeListener("close", onClose);
       clearTimeout(timer);
     };
     const onData = (chunk: string | Buffer) => {
-      buffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-      const idx = buffer.indexOf('\n');
+      buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      const idx = buffer.indexOf("\n");
       if (idx === -1) {
         if (buffer.length > MAX_HELLO_LINE_BYTES) {
           cleanup();
-          reject(new Error('daemon hello line exceeded size limit'));
+          reject(new Error("daemon hello line exceeded size limit"));
         }
         return;
       }
@@ -131,25 +132,38 @@ function readHelloLine(socket: net.Socket): Promise<DaemonHello> {
       }
       try {
         const parsed = JSON.parse(line) as DaemonHello;
-        if (typeof parsed.codegraph !== 'string' || typeof parsed.pid !== 'number') {
-          reject(new Error('daemon hello missing required fields'));
+        if (
+          typeof parsed.codegraph !== "string" ||
+          typeof parsed.pid !== "number"
+        ) {
+          reject(new Error("daemon hello missing required fields"));
           return;
         }
         resolve(parsed);
       } catch (err) {
-        reject(new Error(`daemon hello not JSON: ${err instanceof Error ? err.message : String(err)}`));
+        reject(
+          new Error(
+            `daemon hello not JSON: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
       }
     };
-    const onError = (err: Error) => { cleanup(); reject(err); };
-    const onClose = () => { cleanup(); reject(new Error('daemon closed connection before hello')); };
+    const onError = (err: Error) => {
+      cleanup();
+      reject(err);
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new Error("daemon closed connection before hello"));
+    };
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error('timed out waiting for daemon hello'));
+      reject(new Error("timed out waiting for daemon hello"));
     }, 3000);
     timer.unref?.();
-    socket.on('data', onData);
-    socket.on('error', onError);
-    socket.on('close', onClose);
+    socket.on("data", onData);
+    socket.on("error", onError);
+    socket.on("close", onClose);
   });
 }
 
@@ -160,30 +174,54 @@ function readHelloLine(socket: net.Socket): Promise<DaemonHello> {
  * downstream, which would close the socket prematurely if stdin happens to
  * end early — the MCP spec allows it to stay open across reconnects.
  */
+// 构建一个 stdin/stdout ↔ daemon socket 的双向代理通道，直到任意一方关闭连接为止。
 function pipeUntilClose(socket: net.Socket): Promise<void> {
   return new Promise((resolve) => {
     let resolved = false;
-    const done = () => { if (!resolved) { resolved = true; resolve(); } };
+    const done = () => {
+      if (!resolved) {
+        resolved = true;
+        resolve();
+      }
+    };
 
-    process.stdin.on('data', (chunk) => {
-      try { socket.write(chunk); } catch { /* socket may have errored — close path catches it */ }
+    process.stdin.on("data", (chunk) => {
+      try {
+        socket.write(chunk);
+      } catch {
+        /* socket may have errored — close path catches it */
+      }
     });
-    process.stdin.on('end', () => {
-      try { socket.end(); } catch { /* ignore */ }
+    process.stdin.on("end", () => {
+      try {
+        socket.end();
+      } catch {
+        /* ignore */
+      }
       done();
     });
-    process.stdin.on('close', () => {
-      try { socket.destroy(); } catch { /* ignore */ }
+    process.stdin.on("close", () => {
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
       done();
     });
 
-    socket.on('data', (chunk) => {
-      try { process.stdout.write(chunk); } catch { /* ignore */ }
+    socket.on("data", (chunk) => {
+      try {
+        process.stdout.write(chunk);
+      } catch {
+        /* ignore */
+      }
     });
-    socket.on('end', () => done());
-    socket.on('close', () => done());
-    socket.on('error', (err) => {
-      process.stderr.write(`[CodeGraph MCP] daemon socket error: ${err.message}\n`);
+    socket.on("end", () => done());
+    socket.on("close", () => done());
+    socket.on("error", (err) => {
+      process.stderr.write(
+        `[CodeGraph MCP] daemon socket error: ${err.message}\n`,
+      );
       done();
     });
   });
@@ -198,6 +236,10 @@ function pipeUntilClose(socket: net.Socket): Promise<void> {
  * The proxy's "kill" is just a socket close + process.exit — no SQLite or
  * watchers to clean up, so this is cheap.
  */
+// 定时检查：是谁启动了我？它还在不在？
+// 如果不在了：\
+// 断开 socket
+// 退出进程
 function startPpidWatchdog(socket: net.Socket): void {
   const pollMs = parsePollMs(process.env.CODEGRAPH_PPID_POLL_MS);
   if (pollMs <= 0) return;
@@ -211,8 +253,14 @@ function startPpidWatchdog(socket: net.Socket): void {
       const reason = ppidChanged
         ? `ppid ${originalPpid} -> ${current}`
         : `host pid ${hostPpid} exited`;
-      process.stderr.write(`[CodeGraph MCP] Parent process exited (${reason}); shutting down.\n`);
-      try { socket.destroy(); } catch { /* ignore */ }
+      process.stderr.write(
+        `[CodeGraph MCP] Parent process exited (${reason}); shutting down.\n`,
+      );
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
       process.exit(0);
     }
   }, pollMs);
@@ -220,7 +268,7 @@ function startPpidWatchdog(socket: net.Socket): void {
 }
 
 function parsePollMs(raw: string | undefined): number {
-  if (raw === undefined || raw === '') return DEFAULT_PPID_POLL_MS;
+  if (raw === undefined || raw === "") return DEFAULT_PPID_POLL_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return DEFAULT_PPID_POLL_MS;
   if (parsed < 0) return DEFAULT_PPID_POLL_MS;
@@ -228,7 +276,7 @@ function parsePollMs(raw: string | undefined): number {
 }
 
 function parseHostPpid(raw: string | undefined): number | null {
-  if (raw === undefined || raw === '') return null;
+  if (raw === undefined || raw === "") return null;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 1) return null;
   return parsed;
@@ -240,7 +288,7 @@ function isProcessAliveLocal(pid: number): boolean {
     return true;
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
-    if (e.code === 'EPERM') return true;
+    if (e.code === "EPERM") return true;
     return false;
   }
 }

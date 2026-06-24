@@ -123,6 +123,7 @@ export class Daemon {
     // Engine init is deliberately backgrounded — see #172. The first session
     // to land waits on `ensureInitialized` either way, and unloaded sessions
     // (cross-project tool calls only) shouldn't pay any open cost.
+
     void this.engine.ensureInitialized(this.projectRoot);
 
     // Stale socket file (left over from a SIGKILL'd previous daemon) will
@@ -137,10 +138,13 @@ export class Daemon {
     }
 
     await new Promise<void>((resolve, reject) => {
+      // socket server
       const server = net.createServer((socket) =>
+        // 每来一个连接就会触发：this.handleConnection(socket)
         this.handleConnection(socket),
       );
       server.once("error", (err) => reject(err));
+
       server.listen(this.socketPath, () => {
         // POSIX: tighten permissions to user-only — the socket lives under
         // `.codegraph/`, which is git-ignored but may be on a shared FS.
@@ -243,6 +247,8 @@ export class Daemon {
     this.disarmIdleTimer();
     session.start();
   }
+
+  // mcp => 起一个守护进程 => 收回进程启动一个socket
 
   private dropClient(session: MCPSession): void {
     if (!this.clients.delete(session)) return;

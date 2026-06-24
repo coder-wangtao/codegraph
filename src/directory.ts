@@ -4,13 +4,13 @@
  * Manages the .codegraph/ directory structure for CodeGraph data.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * CodeGraph directory name
  */
-export const CODEGRAPH_DIR = '.codegraph';
+export const CODEGRAPH_DIR = ".codegraph";
 
 /**
  * Get the .codegraph directory path for a project
@@ -25,11 +25,14 @@ export function getCodeGraphDir(projectRoot: string): string {
  */
 export function isInitialized(projectRoot: string): boolean {
   const codegraphDir = getCodeGraphDir(projectRoot);
-  if (!fs.existsSync(codegraphDir) || !fs.statSync(codegraphDir).isDirectory()) {
+  if (
+    !fs.existsSync(codegraphDir) ||
+    !fs.statSync(codegraphDir).isDirectory()
+  ) {
     return false;
   }
   // Must have codegraph.db, not just .codegraph folder
-  const dbPath = path.join(codegraphDir, 'codegraph.db');
+  const dbPath = path.join(codegraphDir, "codegraph.db");
   return fs.existsSync(dbPath);
 }
 
@@ -42,6 +45,7 @@ export function isInitialized(projectRoot: string): boolean {
  * @param startPath - Directory to start searching from
  * @returns The project root containing .codegraph/, or null if not found
  */
+// 从一个起始路径开始，向上逐级查找最近的“已初始化的 CodeGraph 根目录”，找到就返回该目录路径，找不到就返回 null。
 export function findNearestCodeGraphRoot(startPath: string): string | null {
   let current = path.resolve(startPath);
   const root = path.parse(current).root;
@@ -69,7 +73,7 @@ export function findNearestCodeGraphRoot(startPath: string): string | null {
  */
 export function createDirectory(projectRoot: string): void {
   const codegraphDir = getCodeGraphDir(projectRoot);
-  const dbPath = path.join(codegraphDir, 'codegraph.db');
+  const dbPath = path.join(codegraphDir, "codegraph.db");
 
   // Only throw if CodeGraph is actually initialized (db exists)
   // .codegraph/ folder alone is fine
@@ -81,7 +85,7 @@ export function createDirectory(projectRoot: string): void {
   fs.mkdirSync(codegraphDir, { recursive: true });
 
   // Create .gitignore inside .codegraph (if it doesn't exist)
-  const gitignorePath = path.join(codegraphDir, '.gitignore');
+  const gitignorePath = path.join(codegraphDir, ".gitignore");
   if (!fs.existsSync(gitignorePath)) {
     const gitignoreContent = `# CodeGraph data files
 # These are local to each machine and should not be committed
@@ -101,7 +105,7 @@ cache/
 .dirty
 `;
 
-    fs.writeFileSync(gitignorePath, gitignoreContent, 'utf-8');
+    fs.writeFileSync(gitignorePath, gitignoreContent, "utf-8");
   }
 }
 
@@ -145,7 +149,7 @@ export function listDirectoryContents(projectRoot: string): string[] {
 
   const files: string[] = [];
 
-  function walkDir(dir: string, prefix: string = ''): void {
+  function walkDir(dir: string, prefix: string = ""): void {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
 
     for (const entry of entries) {
@@ -207,8 +211,15 @@ export function getDirectorySize(projectRoot: string): number {
 /**
  * Ensure a subdirectory exists within .codegraph
  */
-export function ensureSubdirectory(projectRoot: string, subdirName: string): string {
-  if (subdirName.includes('..') || subdirName.includes(path.sep) || subdirName.includes('/')) {
+export function ensureSubdirectory(
+  projectRoot: string,
+  subdirName: string,
+): string {
+  if (
+    subdirName.includes("..") ||
+    subdirName.includes(path.sep) ||
+    subdirName.includes("/")
+  ) {
     throw new Error(`Invalid subdirectory name: ${subdirName}`);
   }
 
@@ -232,24 +243,26 @@ export function validateDirectory(projectRoot: string): {
   const codegraphDir = getCodeGraphDir(projectRoot);
 
   if (!fs.existsSync(codegraphDir)) {
-    errors.push('CodeGraph directory does not exist');
+    errors.push("CodeGraph directory does not exist");
     return { valid: false, errors };
   }
 
   if (!fs.statSync(codegraphDir).isDirectory()) {
-    errors.push('.codegraph exists but is not a directory');
+    errors.push(".codegraph exists but is not a directory");
     return { valid: false, errors };
   }
 
   // Auto-repair missing .gitignore (non-critical file)
-  const gitignorePath = path.join(codegraphDir, '.gitignore');
+  const gitignorePath = path.join(codegraphDir, ".gitignore");
   if (!fs.existsSync(gitignorePath)) {
     try {
       const gitignoreContent = `# CodeGraph data files\n# These are local to each machine and should not be committed\n\n# Database\n*.db\n*.db-wal\n*.db-shm\n\n# Cache\ncache/\n\n# Logs\n*.log\n\n# Hook markers\n.dirty\n`;
-      fs.writeFileSync(gitignorePath, gitignoreContent, 'utf-8');
+      fs.writeFileSync(gitignorePath, gitignoreContent, "utf-8");
     } catch {
       // Non-fatal: warn but don't block
-      errors.push('.gitignore missing in .codegraph directory and could not be created');
+      errors.push(
+        ".gitignore missing in .codegraph directory and could not be created",
+      );
     }
   }
 

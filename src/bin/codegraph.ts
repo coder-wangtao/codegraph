@@ -1282,10 +1282,11 @@ function main() {
   /**
    * codegraph context <task>
    */
+  //TODO: OK
   program
     .command("context <task>")
     .description("Build context for a task (outputs markdown)") //构建一个任务构建上下文
-    .option("-p, --path <path>", "Project path") 
+    .option("-p, --path <path>", "Project path")
     .option("-n, --max-nodes <number>", "Maximum nodes to include", "50") //最多附几段源代码
     .option("-c, --max-code <number>", "Maximum code blocks", "10")
     .option("--no-code", "Exclude code blocks")
@@ -1339,6 +1340,7 @@ function main() {
   /**
    * codegraph serve
    */
+  //TODO:OK
   program
     .command("serve")
     .description("Start CodeGraph as an MCP server for AI assistants")
@@ -1437,6 +1439,7 @@ function main() {
   /**
    * codegraph unlock [path]
    */
+  // TODO:OK
   program
     .command("unlock [path]")
     .description("Remove a stale lock file that is blocking indexing")
@@ -1476,6 +1479,8 @@ function main() {
    * traversal queries work in scripts, CI, and git hooks without a running MCP
    * server.
    */
+  // 查找“哪些函数/方法调用了某个symbol”
+  // TODO:OK
   program
     .command("callers <symbol>")
     .description("Find all functions/methods that call a specific symbol")
@@ -1581,6 +1586,8 @@ function main() {
   /**
    * codegraph callees <symbol>
    */
+  // TODO:OK
+  // 找出某个symbol调用了哪些函数/方法
   program
     .command("callees <symbol>")
     .description("Find all functions/methods that a specific symbol calls")
@@ -1625,6 +1632,7 @@ function main() {
               match.node.name.endsWith(`.${symbol}`) ||
               match.node.name.endsWith(`::${symbol}`);
             if (!exactMatch && matches.length > 1) continue;
+
             for (const c of cg.getCallees(match.node.id)) {
               if (!seen.has(c.node.id)) {
                 seen.add(c.node.id);
@@ -1685,6 +1693,8 @@ function main() {
   /**
    * codegraph impact <symbol>
    */
+  // 分析“如果我修改某个符号，会影响到哪些代码”。
+  // TODO:OK
   program
     .command("impact <symbol>")
     .description("Analyze what code is affected by changing a symbol")
@@ -1834,6 +1844,9 @@ function main() {
    *   git diff --name-only | codegraph affected --stdin
    *   codegraph affected src/lib/components/Editor.svelte src/routes/+page.svelte
    */
+  // 给定“变更的源文件”，找出“可能受影响的测试文件”。
+  // 输入affected src/a.ts src/b.ts 输出tests/a.test.ts e2e/login.spec.ts
+  //TODO: OK
   program
     .command("affected [files...]")
     .description("Find test files affected by changed source files")
@@ -1916,17 +1929,19 @@ function main() {
           }
 
           // BFS to find all transitive dependents of changed files, filtered to test files
-          const affectedTests = new Set<string>();
-          const allDependents = new Set<string>();
+          const affectedTests = new Set<string>(); // 最终输出的测试文件
+          const allDependents = new Set<string>(); // 调试用：所有访问过的依赖节点
 
           for (const file of changedFiles) {
             // If the changed file is itself a test file, include it
+            // 如果本身就是 test
             if (isTestFile(file)) {
               affectedTests.add(file);
               continue;
             }
 
             // BFS through dependents
+            // BFS 依赖遍历
             const queue: Array<{ file: string; depth: number }> = [
               { file, depth: 0 },
             ];
@@ -1993,10 +2008,10 @@ function main() {
       },
     );
 
-  //TODO: OK
   /**
    * codegraph install
    */
+  //TODO: OK
   program
     .command("install")
     .description(

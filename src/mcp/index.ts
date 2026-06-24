@@ -147,6 +147,7 @@ function resolveDaemonRoot(explicitPath: string | null): string | null {
   const root = findNearestCodeGraphRoot(candidate);
   if (!root) return null;
   try {
+    // 返回这个路径的“真实绝对路径”（解析符号链接后的路径）。
     return fs.realpathSync(root);
   } catch {
     return root;
@@ -180,6 +181,7 @@ function spawnDetachedDaemon(root: string): void {
   } catch {
     stdio = "ignore"; // no log file — discard daemon output rather than fail
   }
+  // node cli.js serve --mcp --path <root>
   try {
     const child = spawn(
       process.execPath,
@@ -259,6 +261,7 @@ export class MCPServer {
     // Direct mode if the user opted out. Setting the env var is sufficient to
     // get the pre-#411 single-process behavior.
     if (daemonOptOutSet()) {
+      // 单进程 MCP
       return this.startDirect("CODEGRAPH_NO_DAEMON set");
     }
 
@@ -409,13 +412,16 @@ export class MCPServer {
     // Fast path: a daemon may already be listening. On success runProxy pipes
     // stdio until the host disconnects, so a 'proxied' outcome means this
     // process has finished its entire job.
+    // 尝试复用 daemo
     let probe = await runProxy(socketPath);
     if (probe.outcome === "proxied") return "proxy";
     if (probe.reason === "version mismatch") return "fallback";
 
     // No reachable daemon — spawn one (detached) and wait for it to bind.
+    // 启动 daemon
     spawnDetachedDaemon(root);
 
+    // 等待 daemon 启动 + 重试
     for (let attempt = 0; attempt < DAEMON_CONNECT_MAX_RETRIES; attempt++) {
       await sleep(DAEMON_CONNECT_RETRY_DELAY_MS);
       probe = await runProxy(socketPath);

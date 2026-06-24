@@ -10,9 +10,9 @@
  *   inotify watch set — that's the entire point of issue #411.
  */
 
-import CodeGraph, { findNearestCodeGraphRoot } from '../index';
-import { watchDisabledReason } from '../sync';
-import { ToolHandler } from './tools';
+import CodeGraph, { findNearestCodeGraphRoot } from "../index";
+import { watchDisabledReason } from "../sync";
+import { ToolHandler } from "./tools";
 
 export interface MCPEngineOptions {
   /**
@@ -37,7 +37,7 @@ export class MCPEngine {
   // state for the engine, since cross-project queries still work).
   private projectPath: string | null = null;
   // Set on first `ensureInitialized` so subsequent sessions don't redo work.
-  private initPromise: Promise<void> | null = null;
+  private initPromise: Promise<void> | null = null; // 初始化锁（关键并发控制）用来防止 并发重复初始化
   private watcherStarted = false;
   private opts: Required<MCPEngineOptions>;
   private closed = false;
@@ -81,12 +81,17 @@ export class MCPEngine {
    * The original `MCPServer.tryInitializeDefault` carried the same retry-on-
    * subsequent-tool-call semantics; we preserve them by NOT throwing when the
    * search misses (just leaves `cg` null so the next call can retry).
+   *
    */
   async ensureInitialized(searchFrom: string): Promise<void> {
     if (this.closed) return;
     if (this.toolHandler.hasDefaultCodeGraph()) return;
     if (this.initPromise) {
-      try { await this.initPromise; } catch { /* let caller retry */ }
+      try {
+        await this.initPromise;
+      } catch {
+        /* let caller retry */
+      }
       return;
     }
 
@@ -115,7 +120,11 @@ export class MCPEngine {
     try {
       // Close any previously failed instance to avoid leaking resources.
       if (this.cg) {
-        try { this.cg.close(); } catch { /* ignore */ }
+        try {
+          this.cg.close();
+        } catch {
+          /* ignore */
+        }
         this.cg = null;
       }
       this.cg = CodeGraph.openSync(resolvedRoot);
@@ -137,7 +146,11 @@ export class MCPEngine {
     this.closed = true;
     this.toolHandler.closeAll();
     if (this.cg) {
-      try { this.cg.close(); } catch { /* ignore */ }
+      try {
+        this.cg.close();
+      } catch {
+        /* ignore */
+      }
       this.cg = null;
     }
   }
@@ -160,7 +173,9 @@ export class MCPEngine {
       this.catchUpSync();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[CodeGraph MCP] Failed to open project at ${resolvedRoot}: ${msg}\n`);
+      process.stderr.write(
+        `[CodeGraph MCP] Failed to open project at ${resolvedRoot}: ${msg}\n`,
+      );
     }
   }
 
@@ -171,14 +186,17 @@ export class MCPEngine {
    * exactly matches the prior in-tree implementation so log-driven dashboards
    * keep working.
    */
+  //启动“文件监听器”，让 CodeGraph 在代码文件发生变化时自动同步索引（自动更新代码图）。
   private startWatching(): void {
     if (!this.cg || this.watcherStarted || !this.opts.watch) return;
 
-    const disabledReason = watchDisabledReason(this.projectPath ?? process.cwd());
+    const disabledReason = watchDisabledReason(
+      this.projectPath ?? process.cwd(),
+    );
     if (disabledReason) {
       process.stderr.write(
         `[CodeGraph MCP] File watcher disabled — ${disabledReason}. ` +
-        `The graph will not auto-update; run \`codegraph sync\` (or install the git sync hooks via \`codegraph init\`) to refresh.\n`
+          `The graph will not auto-update; run \`codegraph sync\` (or install the git sync hooks via \`codegraph init\`) to refresh.\n`,
       );
       this.watcherStarted = true;
       return;
@@ -189,9 +207,13 @@ export class MCPEngine {
     // large generated outputs) where the 2s default fires too often. Clamped
     // to [100ms, 60s]; out-of-range / non-numeric values fall back to the
     // FileWatcher default. We log the active value so it's discoverable.
-    const debounceMs = parseDebounceEnv(process.env.CODEGRAPH_WATCH_DEBOUNCE_MS);
+    const debounceMs = parseDebounceEnv(
+      process.env.CODEGRAPH_WATCH_DEBOUNCE_MS,
+    );
     if (debounceMs !== undefined) {
-      process.stderr.write(`[CodeGraph MCP] File watcher debounce: ${debounceMs}ms (CODEGRAPH_WATCH_DEBOUNCE_MS)\n`);
+      process.stderr.write(
+        `[CodeGraph MCP] File watcher debounce: ${debounceMs}ms (CODEGRAPH_WATCH_DEBOUNCE_MS)\n`,
+      );
     }
 
     const started = this.cg.watch({
@@ -199,21 +221,25 @@ export class MCPEngine {
       onSyncComplete: (result) => {
         if (result.filesChanged > 0) {
           process.stderr.write(
-            `[CodeGraph MCP] Auto-synced ${result.filesChanged} file(s) in ${result.durationMs}ms\n`
+            `[CodeGraph MCP] Auto-synced ${result.filesChanged} file(s) in ${result.durationMs}ms\n`,
           );
         }
       },
       onSyncError: (err) => {
-        process.stderr.write(`[CodeGraph MCP] Auto-sync error: ${err.message}\n`);
+        process.stderr.write(
+          `[CodeGraph MCP] Auto-sync error: ${err.message}\n`,
+        );
       },
     });
 
     this.watcherStarted = true;
     if (started) {
-      process.stderr.write('[CodeGraph MCP] File watcher active — graph will auto-sync on changes\n');
+      process.stderr.write(
+        "[CodeGraph MCP] File watcher active — graph will auto-sync on changes\n",
+      );
     } else {
       process.stderr.write(
-        '[CodeGraph MCP] File watcher unavailable on this platform — run `codegraph sync` to refresh the graph after changes.\n'
+        "[CodeGraph MCP] File watcher unavailable on this platform — run `codegraph sync` to refresh the graph after changes.\n",
       );
     }
   }
@@ -234,9 +260,12 @@ export class MCPEngine {
     const p = cg
       .sync()
       .then((result) => {
-        const changed = result.filesAdded + result.filesModified + result.filesRemoved;
+        const changed =
+          result.filesAdded + result.filesModified + result.filesRemoved;
         if (changed > 0) {
-          process.stderr.write(`[CodeGraph MCP] Caught up ${changed} file(s) changed since last run\n`);
+          process.stderr.write(
+            `[CodeGraph MCP] Caught up ${changed} file(s) changed since last run\n`,
+          );
         }
       })
       .catch((err) => {
@@ -260,6 +289,7 @@ export class MCPEngine {
  * this misconfiguration" rather than capped, since silently capping a 0 or
  * a typoed value would mask a real config bug.
  */
+
 export function parseDebounceEnv(raw: string | undefined): number | undefined {
   if (!raw || !raw.trim()) return undefined;
   const n = Number(raw);

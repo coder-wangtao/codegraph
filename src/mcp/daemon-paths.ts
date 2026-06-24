@@ -18,17 +18,21 @@
  * pointer to the socket path the daemon chose.
  */
 
-import * as crypto from 'crypto';
-import * as os from 'os';
-import * as path from 'path';
-import { getCodeGraphDir } from '../directory';
+import * as crypto from "crypto";
+import * as os from "os";
+import * as path from "path";
+import { getCodeGraphDir } from "../directory";
 
 /** Soft upper bound for in-project socket paths. */
 const POSIX_SOCKET_PATH_LIMIT = 100;
 
 /** Short stable identifier for a project root — used in tmpdir/pipe names. */
 function projectHash(projectRoot: string): string {
-  return crypto.createHash('sha256').update(path.resolve(projectRoot)).digest('hex').slice(0, 16);
+  return crypto
+    .createHash("sha256")
+    .update(path.resolve(projectRoot))
+    .digest("hex")
+    .slice(0, 16);
 }
 
 /**
@@ -36,11 +40,12 @@ function projectHash(projectRoot: string): string {
  * proxy should connect to) for `projectRoot`. Deterministic given a project
  * root, so independent processes converge without coordination.
  */
+// 这里的/my/project/.codegraph/daemon.sock不是文件 而是通信端口的文件路径表示 类似于localhost:3000
 export function getDaemonSocketPath(projectRoot: string): string {
-  if (process.platform === 'win32') {
+  if (process.platform === "win32") {
     return `\\\\.\\pipe\\codegraph-${projectHash(projectRoot)}`;
   }
-  const inProject = path.join(getCodeGraphDir(projectRoot), 'daemon.sock');
+  const inProject = path.join(getCodeGraphDir(projectRoot), "daemon.sock");
   if (inProject.length <= POSIX_SOCKET_PATH_LIMIT) return inProject;
   // Long project paths (deep monorepos, Bazel out dirs) need tmpdir fallback
   // or `bind` returns EADDRINUSE / ENAMETOOLONG. Hash keeps it project-scoped.
@@ -49,7 +54,7 @@ export function getDaemonSocketPath(projectRoot: string): string {
 
 /** Absolute path to the daemon pid lockfile for `projectRoot`. */
 export function getDaemonPidPath(projectRoot: string): string {
-  return path.join(getCodeGraphDir(projectRoot), 'daemon.pid');
+  return path.join(getCodeGraphDir(projectRoot), "daemon.pid");
 }
 
 /** Structured contents of the pid lockfile. */
@@ -65,7 +70,7 @@ export interface DaemonLockInfo {
  * human readability — operators occasionally `cat` this when debugging.
  */
 export function encodeLockInfo(info: DaemonLockInfo): string {
-  return JSON.stringify(info, null, 2) + '\n';
+  return JSON.stringify(info, null, 2) + "\n";
 }
 
 /**
@@ -80,10 +85,10 @@ export function decodeLockInfo(raw: string): DaemonLockInfo | null {
     const parsed = JSON.parse(trimmed);
     if (
       parsed &&
-      typeof parsed.pid === 'number' &&
-      typeof parsed.version === 'string' &&
-      typeof parsed.socketPath === 'string' &&
-      typeof parsed.startedAt === 'number'
+      typeof parsed.pid === "number" &&
+      typeof parsed.version === "string" &&
+      typeof parsed.socketPath === "string" &&
+      typeof parsed.startedAt === "number"
     ) {
       return parsed as DaemonLockInfo;
     }
@@ -93,7 +98,7 @@ export function decodeLockInfo(raw: string): DaemonLockInfo | null {
   }
   const pid = Number(trimmed);
   if (Number.isFinite(pid) && pid > 0) {
-    return { pid, version: 'unknown', socketPath: '', startedAt: 0 };
+    return { pid, version: "unknown", socketPath: "", startedAt: 0 };
   }
   return null;
 }

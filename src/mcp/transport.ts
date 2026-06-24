@@ -14,14 +14,21 @@
  * is identical regardless of where the bytes come from.
  */
 
-import * as readline from 'readline';
-import type { Socket } from 'net';
+// MCP Protocol (JSON-RPC)
+//              ↑
+// ┌────────────┴────────────┐
+// │                         │
+// Stdio Transport        Socket Transport
+// │                         │
+// CLI / subprocess       daemon / server
+import * as readline from "readline";
+import type { Socket } from "net";
 
 /**
  * JSON-RPC 2.0 Request
  */
 export interface JsonRpcRequest {
-  jsonrpc: '2.0';
+  jsonrpc: "2.0";
   id: string | number;
   method: string;
   params?: unknown;
@@ -31,7 +38,7 @@ export interface JsonRpcRequest {
  * JSON-RPC 2.0 Response
  */
 export interface JsonRpcResponse {
-  jsonrpc: '2.0';
+  jsonrpc: "2.0";
   id: string | number | null;
   result?: unknown;
   error?: JsonRpcError;
@@ -50,7 +57,7 @@ export interface JsonRpcError {
  * JSON-RPC 2.0 Notification (no id, no response expected)
  */
 export interface JsonRpcNotification {
-  jsonrpc: '2.0';
+  jsonrpc: "2.0";
   method: string;
   params?: unknown;
 }
@@ -64,21 +71,38 @@ export const ErrorCodes = {
   InternalError: -32603,
 } as const;
 
-export type MessageHandler = (message: JsonRpcRequest | JsonRpcNotification) => Promise<void>;
+export type MessageHandler = (
+  message: JsonRpcRequest | JsonRpcNotification,
+) => Promise<void>;
 
 /**
  * Generic JSON-RPC transport interface — common surface for stdio and socket
  * carriers. Anything below the session layer (initialize, tool dispatch, etc.)
  * talks to this, not to a concrete transport class.
  */
+//TODO: MCP 里所有通信方式必须遵守的“统一接口规范"
+
 export interface JsonRpcTransport {
   start(handler: MessageHandler): void;
   stop(): void;
+  //发送完整 JSON-RPC response
   send(response: JsonRpcResponse): void;
   notify(method: string, params?: unknown): void;
-  request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown>;
+  //发起 RPC 请求，并等待返回结果
+  request(
+    method: string,
+    params?: unknown,
+    timeoutMs?: number,
+  ): Promise<unknown>;
+  //手动发送 success response
   sendResult(id: string | number, result: unknown): void;
-  sendError(id: string | number | null, code: number, message: string, data?: unknown): void;
+  // 发送 JSON-RPC error response
+  sendError(
+    id: string | number | null,
+    code: number,
+    message: string,
+    data?: unknown,
+  ): void;
 }
 
 /**
@@ -91,10 +115,14 @@ abstract class LineBasedJsonRpcTransport implements JsonRpcTransport {
   protected messageHandler: MessageHandler | null = null;
   // Outstanding server-initiated requests (e.g. roots/list), keyed by the id
   // we sent. Responses from the client are matched back here.
-  protected pending = new Map<string | number, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-  }>();
+  // 正在等待响应的请求池
+  protected pending = new Map<
+    string | number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+    }
+  >();
   protected nextRequestId = 1;
   protected stopped = false;
 
@@ -111,20 +139,35 @@ abstract class LineBasedJsonRpcTransport implements JsonRpcTransport {
    * when the client didn't pass one in `initialize` (see issue #196). Rejects
    * on timeout so callers can fall back rather than hang forever.
    */
-  request(method: string, params?: unknown, timeoutMs = 5000): Promise<unknown> {
+  request(
+    method: string,
+    params?: unknown,
+    timeoutMs = 5000,
+  ): Promise<unknown> {
+    // 生成 request id + 记录 pending + 发送 JSON + 等待 response + 超时保护
     const id = `${this.idPrefix()}-${this.nextRequestId++}`;
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`Timed out after ${timeoutMs}ms waiting for "${method}" response`));
+        reject(
+          new Error(
+            `Timed out after ${timeoutMs}ms waiting for "${method}" response`,
+          ),
+        );
       }, timeoutMs);
       // Don't let a pending request keep the process alive on shutdown.
       timer.unref?.();
       this.pending.set(id, {
-        resolve: (value) => { clearTimeout(timer); resolve(value); },
-        reject: (error) => { clearTimeout(timer); reject(error); },
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
       });
-      this.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
+      this.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
     });
   }
 
@@ -133,16 +176,25 @@ abstract class LineBasedJsonRpcTransport implements JsonRpcTransport {
   }
 
   notify(method: string, params?: unknown): void {
-    const notification: JsonRpcNotification = { jsonrpc: '2.0', method, params };
+    const notification: JsonRpcNotification = {
+      jsonrpc: "2.0",
+      method,
+      params,
+    };
     this.write(JSON.stringify(notification));
   }
 
   sendResult(id: string | number, result: unknown): void {
-    this.send({ jsonrpc: '2.0', id, result });
+    this.send({ jsonrpc: "2.0", id, result });
   }
 
-  sendError(id: string | number | null, code: number, message: string, data?: unknown): void {
-    this.send({ jsonrpc: '2.0', id, error: { code, message, data } });
+  sendError(
+    id: string | number | null,
+    code: number,
+    message: string,
+    data?: unknown,
+  ): void {
+    this.send({ jsonrpc: "2.0", id, error: { code, message, data } });
   }
 
   /**
@@ -167,7 +219,7 @@ abstract class LineBasedJsonRpcTransport implements JsonRpcTransport {
     try {
       parsed = JSON.parse(trimmed);
     } catch {
-      this.sendError(null, ErrorCodes.ParseError, 'Parse error: invalid JSON');
+      this.sendError(null, ErrorCodes.ParseError, "Parse error: invalid JSON");
       return;
     }
 
@@ -176,10 +228,10 @@ abstract class LineBasedJsonRpcTransport implements JsonRpcTransport {
     // used to be dropped as "Invalid Request" because they carry no method.
     const obj = parsed as Record<string, unknown>;
     if (
-      obj?.jsonrpc === '2.0' &&
-      typeof obj.method !== 'string' &&
-      'id' in obj &&
-      ('result' in obj || 'error' in obj)
+      obj?.jsonrpc === "2.0" &&
+      typeof obj.method !== "string" &&
+      "id" in obj &&
+      ("result" in obj || "error" in obj)
     ) {
       this.handleResponse(obj);
       return;
@@ -187,20 +239,26 @@ abstract class LineBasedJsonRpcTransport implements JsonRpcTransport {
 
     // Validate basic JSON-RPC structure
     if (!this.isValidMessage(parsed)) {
-      this.sendError(null, ErrorCodes.InvalidRequest, 'Invalid Request: not a valid JSON-RPC 2.0 message');
+      this.sendError(
+        null,
+        ErrorCodes.InvalidRequest,
+        "Invalid Request: not a valid JSON-RPC 2.0 message",
+      );
       return;
     }
 
     if (this.messageHandler) {
       try {
-        await this.messageHandler(parsed as JsonRpcRequest | JsonRpcNotification);
+        await this.messageHandler(
+          parsed as JsonRpcRequest | JsonRpcNotification,
+        );
       } catch (err) {
         const message = parsed as JsonRpcRequest;
-        if ('id' in message) {
+        if ("id" in message) {
           this.sendError(
             message.id,
             ErrorCodes.InternalError,
-            `Internal error: ${err instanceof Error ? err.message : String(err)}`
+            `Internal error: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
       }
@@ -217,9 +275,9 @@ abstract class LineBasedJsonRpcTransport implements JsonRpcTransport {
     const pending = this.pending.get(id);
     if (!pending) return;
     this.pending.delete(id);
-    if ('error' in msg && msg.error) {
+    if ("error" in msg && msg.error) {
       const err = msg.error as { message?: string };
-      pending.reject(new Error(err.message || 'Request failed'));
+      pending.reject(new Error(err.message || "Request failed"));
     } else {
       pending.resolve(msg.result);
     }
@@ -229,10 +287,10 @@ abstract class LineBasedJsonRpcTransport implements JsonRpcTransport {
    * Check if message is a valid JSON-RPC 2.0 message
    */
   private isValidMessage(msg: unknown): boolean {
-    if (typeof msg !== 'object' || msg === null) return false;
+    if (typeof msg !== "object" || msg === null) return false;
     const obj = msg as Record<string, unknown>;
-    if (obj.jsonrpc !== '2.0') return false;
-    if (typeof obj.method !== 'string') return false;
+    if (obj.jsonrpc !== "2.0") return false;
+    if (typeof obj.method !== "string") return false;
     return true;
   }
 }
@@ -261,6 +319,7 @@ export interface StdioTransportOptions {
  * shared-daemon mode for the launcher's session (with `exitOnClose: false`)
  * so the daemon outlives its launcher.
  */
+// 1对1通信
 export class StdioTransport extends LineBasedJsonRpcTransport {
   private rl: readline.Interface | null = null;
   private opts: Required<StdioTransportOptions>;
@@ -269,7 +328,11 @@ export class StdioTransport extends LineBasedJsonRpcTransport {
     super();
     this.opts = {
       exitOnClose: opts.exitOnClose ?? true,
-      onClose: opts.onClose ?? (() => { /* no-op */ }),
+      onClose:
+        opts.onClose ??
+        (() => {
+          /* no-op */
+        }),
     };
   }
 
@@ -282,11 +345,12 @@ export class StdioTransport extends LineBasedJsonRpcTransport {
       terminal: false,
     });
 
-    this.rl.on('line', async (line) => {
+    this.rl.on("line", async (line) => {
+      // 每行数据 {"id":1,"method":"ping"}
       await this.handleLine(line);
     });
 
-    this.rl.on('close', () => {
+    this.rl.on("close", () => {
       this.opts.onClose();
       if (this.opts.exitOnClose) {
         process.exit(0);
@@ -297,7 +361,7 @@ export class StdioTransport extends LineBasedJsonRpcTransport {
   stop(): void {
     if (this.stopped) return;
     this.stopped = true;
-    this.rejectPending('Transport stopped');
+    this.rejectPending("Transport stopped");
     if (this.rl) {
       this.rl.close();
       this.rl = null;
@@ -305,11 +369,11 @@ export class StdioTransport extends LineBasedJsonRpcTransport {
   }
 
   protected write(line: string): void {
-    process.stdout.write(line + '\n');
+    process.stdout.write(line + "\n");
   }
 
   protected idPrefix(): string {
-    return 'cg-srv';
+    return "cg-srv";
   }
 }
 
@@ -321,11 +385,16 @@ export class StdioTransport extends LineBasedJsonRpcTransport {
  * `stop()` and stream-close *don't* call `process.exit` — a daemon-side session
  * ending must not bring down the whole daemon.
  */
+// 1对多通信
 export class SocketTransport extends LineBasedJsonRpcTransport {
-  private buffer = '';
+  // 解决 TCP “拆包 / 粘包”问题
+  private buffer = "";
   private closeHandlers: Array<() => void> = [];
 
-  constructor(private socket: Socket, private prefix: string = 'cg-sock') {
+  constructor(
+    private socket: Socket,
+    private prefix: string = "cg-sock",
+  ) {
     super();
   }
 
@@ -340,8 +409,9 @@ export class SocketTransport extends LineBasedJsonRpcTransport {
   start(handler: MessageHandler): void {
     this.messageHandler = handler;
 
-    this.socket.setEncoding('utf8');
-    this.socket.on('data', (chunk: string) => {
+    this.socket.setEncoding("utf8"); // 设置编码
+    this.socket.on("data", (chunk: string) => {
+      // 收数据
       this.buffer += chunk;
       let idx;
       // Drain every complete line; tail-fragment stays in the buffer for the
@@ -349,15 +419,15 @@ export class SocketTransport extends LineBasedJsonRpcTransport {
       // permits out-of-order responses, and serializing here would deadlock if
       // a handler issued a server-initiated request that needed a *later* line
       // to arrive (e.g. roots/list mid-tools-call).
-      while ((idx = this.buffer.indexOf('\n')) !== -1) {
+      while ((idx = this.buffer.indexOf("\n")) !== -1) {
         const line = this.buffer.slice(0, idx);
         this.buffer = this.buffer.slice(idx + 1);
         void this.handleLine(line);
       }
     });
 
-    this.socket.on('close', () => this.handleSocketClose());
-    this.socket.on('error', (err) => {
+    this.socket.on("close", () => this.handleSocketClose());
+    this.socket.on("error", (err) => {
       // Don't crash the daemon over a broken pipe; just shut this connection.
       process.stderr.write(`[CodeGraph daemon] socket error: ${err.message}\n`);
       this.handleSocketClose();
@@ -367,7 +437,7 @@ export class SocketTransport extends LineBasedJsonRpcTransport {
   stop(): void {
     if (this.stopped) return;
     this.stopped = true;
-    this.rejectPending('Transport stopped');
+    this.rejectPending("Transport stopped");
     if (!this.socket.destroyed) {
       this.socket.end();
       this.socket.destroy();
@@ -381,13 +451,13 @@ export class SocketTransport extends LineBasedJsonRpcTransport {
    */
   writeRaw(line: string): void {
     if (!this.socket.destroyed) {
-      this.socket.write(line.endsWith('\n') ? line : line + '\n');
+      this.socket.write(line.endsWith("\n") ? line : line + "\n");
     }
   }
 
   protected write(line: string): void {
     if (!this.socket.destroyed) {
-      this.socket.write(line + '\n');
+      this.socket.write(line + "\n");
     }
   }
 
@@ -398,9 +468,13 @@ export class SocketTransport extends LineBasedJsonRpcTransport {
   private handleSocketClose(): void {
     if (this.stopped) return;
     this.stopped = true;
-    this.rejectPending('Socket closed');
+    this.rejectPending("Socket closed");
     for (const h of this.closeHandlers) {
-      try { h(); } catch { /* never let a close-handler take the daemon down */ }
+      try {
+        h();
+      } catch {
+        /* never let a close-handler take the daemon down */
+      }
     }
     this.closeHandlers = [];
   }

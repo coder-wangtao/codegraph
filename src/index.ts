@@ -595,6 +595,7 @@ export class CodeGraph {
     this.watcher = new FileWatcher(
       this.projectRoot,
       async () => {
+        // codeGraph sync() 同步索引（自动更新代码图）
         const result = await this.sync();
         // sync() returns this exact zero-shape iff it failed to acquire the
         // file lock (a real empty sync always has filesChecked > 0 because

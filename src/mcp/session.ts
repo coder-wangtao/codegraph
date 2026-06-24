@@ -12,24 +12,29 @@
  * `__tests__/mcp-initialize.test.ts` still drive this code path.
  */
 
-import * as path from 'path';
-import { JsonRpcRequest, JsonRpcNotification, JsonRpcTransport, ErrorCodes } from './transport';
-import { MCPEngine } from './engine';
-import { tools } from './tools';
-import { SERVER_INSTRUCTIONS } from './server-instructions';
-import { CodeGraphPackageVersion } from './version';
+import * as path from "path";
+import {
+  JsonRpcRequest,
+  JsonRpcNotification,
+  JsonRpcTransport,
+  ErrorCodes,
+} from "./transport";
+import { MCPEngine } from "./engine";
+import { tools } from "./tools";
+import { SERVER_INSTRUCTIONS } from "./server-instructions";
+import { CodeGraphPackageVersion } from "./version";
 
 /**
  * MCP Server Info — kept on the session because some clients log it. The
  * version tracks the real package version (was a hard-coded '0.1.0').
  */
 const SERVER_INFO = {
-  name: 'codegraph',
+  name: "codegraph",
   version: CodeGraphPackageVersion,
 };
 
 /** MCP Protocol Version (latest the server claims). */
-const PROTOCOL_VERSION = '2024-11-05';
+const PROTOCOL_VERSION = "2024-11-05";
 
 /**
  * How long to wait for the client's `roots/list` response before giving up
@@ -45,22 +50,22 @@ function fileUriToPath(uri: string): string {
   try {
     const url = new URL(uri);
     let filePath = decodeURIComponent(url.pathname);
-    if (process.platform === 'win32' && /^\/[a-zA-Z]:/.test(filePath)) {
+    if (process.platform === "win32" && /^\/[a-zA-Z]:/.test(filePath)) {
       filePath = filePath.slice(1);
     }
     return path.resolve(filePath);
   } catch {
-    return uri.replace(/^file:\/\/\/?/, '');
+    return uri.replace(/^file:\/\/\/?/, "");
   }
 }
 
 /** First usable filesystem path from a `roots/list` result, or null. */
 function firstRootPath(result: unknown): string | null {
-  if (!result || typeof result !== 'object') return null;
+  if (!result || typeof result !== "object") return null;
   const roots = (result as { roots?: unknown }).roots;
   if (!Array.isArray(roots) || roots.length === 0) return null;
   const first = roots[0] as { uri?: unknown };
-  if (typeof first?.uri !== 'string') return null;
+  if (typeof first?.uri !== "string") return null;
   return fileUriToPath(first.uri);
 }
 
@@ -112,23 +117,31 @@ export class MCPSession {
     return this.transport;
   }
 
-  private async handleMessage(message: JsonRpcRequest | JsonRpcNotification): Promise<void> {
-    const isRequest = 'id' in message;
+  private async handleMessage(
+    message: JsonRpcRequest | JsonRpcNotification,
+  ): Promise<void> {
+    const isRequest = "id" in message;
     switch (message.method) {
-      case 'initialize':
+      case "initialize":
+        // 建立 MCP session
         if (isRequest) await this.handleInitialize(message as JsonRpcRequest);
         break;
-      case 'initialized':
+      // client 告诉 server：我初始化完了 不需要响应
+      case "initialized":
         // Notification that client has finished initialization — no action needed.
         break;
-      case 'tools/list':
+      case "tools/list":
+        // client 告诉 server：返回 MCP 支持的工具列表
         if (isRequest) await this.handleToolsList(message as JsonRpcRequest);
         break;
-      case 'tools/call':
+      // 针织执行工具调用
+      case "tools/call":
         if (isRequest) await this.handleToolsCall(message as JsonRpcRequest);
         break;
-      case 'ping':
-        if (isRequest) this.transport.sendResult((message as JsonRpcRequest).id, {});
+      case "ping":
+        // 测试连接是否存活
+        if (isRequest)
+          this.transport.sendResult((message as JsonRpcRequest).id, {});
         break;
       default:
         if (isRequest) {
@@ -142,11 +155,13 @@ export class MCPSession {
   }
 
   private async handleInitialize(request: JsonRpcRequest): Promise<void> {
-    const params = request.params as {
-      rootUri?: string;
-      workspaceFolders?: Array<{ uri: string; name: string }>;
-      capabilities?: { roots?: unknown };
-    } | undefined;
+    const params = request.params as
+      | {
+          rootUri?: string;
+          workspaceFolders?: Array<{ uri: string; name: string }>;
+          capabilities?: { roots?: unknown };
+        }
+      | undefined;
 
     this.clientSupportsRoots = !!params?.capabilities?.roots;
 
@@ -193,7 +208,11 @@ export class MCPSession {
     };
 
     if (!params || !params.name) {
-      this.transport.sendError(request.id, ErrorCodes.InvalidParams, 'Missing tool name');
+      this.transport.sendError(
+        request.id,
+        ErrorCodes.InvalidParams,
+        "Missing tool name",
+      );
       return;
     }
 
@@ -212,7 +231,9 @@ export class MCPSession {
 
     await this.retryInitIfNeeded();
 
-    const result = await this.engine.getToolHandler().execute(toolName, toolArgs);
+    const result = await this.engine
+      .getToolHandler()
+      .execute(toolName, toolArgs);
     this.transport.sendResult(request.id, result);
   }
 
@@ -226,7 +247,11 @@ export class MCPSession {
    */
   private async retryInitIfNeeded(): Promise<void> {
     if (this.resolvePromise) {
-      try { await this.resolvePromise; } catch { /* fall through to retry */ }
+      try {
+        await this.resolvePromise;
+      } catch {
+        /* fall through to retry */
+      }
       this.resolvePromise = null;
     }
 
@@ -238,7 +263,11 @@ export class MCPSession {
       this.resolvePromise = this.clientSupportsRoots
         ? this.initFromRoots()
         : this.engine.ensureInitialized(process.cwd());
-      try { await this.resolvePromise; } catch { /* fall through */ }
+      try {
+        await this.resolvePromise;
+      } catch {
+        /* fall through */
+      }
       this.resolvePromise = null;
       if (this.engine.hasDefaultCodeGraph()) return;
     }
@@ -256,16 +285,24 @@ export class MCPSession {
   private async initFromRoots(): Promise<void> {
     let target = process.cwd();
     try {
-      const result = await this.transport.request('roots/list', undefined, ROOTS_LIST_TIMEOUT_MS);
+      const result = await this.transport.request(
+        "roots/list",
+        undefined,
+        ROOTS_LIST_TIMEOUT_MS,
+      );
       const rootPath = firstRootPath(result);
       if (rootPath) {
         target = rootPath;
       } else {
-        process.stderr.write('[CodeGraph MCP] Client returned no workspace roots; falling back to process cwd.\n');
+        process.stderr.write(
+          "[CodeGraph MCP] Client returned no workspace roots; falling back to process cwd.\n",
+        );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[CodeGraph MCP] roots/list request failed (${msg}); falling back to process cwd.\n`);
+      process.stderr.write(
+        `[CodeGraph MCP] roots/list request failed (${msg}); falling back to process cwd.\n`,
+      );
     }
     await this.engine.ensureInitialized(target);
   }
