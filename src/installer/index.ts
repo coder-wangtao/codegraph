@@ -113,7 +113,6 @@ export async function runInstallerWithOptions(
     clack.outro("No agent targets selected — nothing to do.");
     return;
   }
-
   // Step 2: install the codegraph npm package on PATH (always offered;
   // matches existing behavior). Skipped when --yes (assume present).
   if (!useDefaults) {
@@ -217,7 +216,7 @@ export async function runInstallerWithOptions(
       );
       continue;
     }
-    // 把mcp server的配置写入到各个模型中
+    //TODO: 把mcp server的配置写入到各个agent中
     const result = target.install(location, { autoAllow });
     for (const file of result.files) {
       const verb =
@@ -504,7 +503,6 @@ async function initializeLocalProject(
   useDefaults = false,
 ): Promise<void> {
   const projectPath = process.cwd();
-
   let CodeGraph: typeof import("../index").default;
   try {
     CodeGraph = (await import("../index")).default;

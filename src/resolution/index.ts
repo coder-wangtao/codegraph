@@ -4,10 +4,10 @@
  * Coordinates all reference resolution strategies.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { Node, UnresolvedReference, Edge } from '../types';
-import { QueryBuilder } from '../db/queries';
+import * as fs from "fs";
+import * as path from "path";
+import { Node, UnresolvedReference, Edge } from "../types";
+import { QueryBuilder } from "../db/queries";
 import {
   UnresolvedRef,
   ResolvedRef,
@@ -15,16 +15,22 @@ import {
   ResolutionContext,
   FrameworkResolver,
   ImportMapping,
-} from './types';
-import { matchReference } from './name-matcher';
-import { resolveViaImport, resolveJvmImport, extractImportMappings, extractReExports, loadCppIncludeDirs } from './import-resolver';
-import { detectFrameworks } from './frameworks';
-import { synthesizeCallbackEdges } from './callback-synthesizer';
-import { loadProjectAliases, type AliasMap } from './path-aliases';
-import { loadGoModule, type GoModule } from './go-module';
-import { logDebug } from '../errors';
-import type { ReExport } from './types';
-import { LRUCache } from './lru-cache';
+} from "./types";
+import { matchReference } from "./name-matcher";
+import {
+  resolveViaImport,
+  resolveJvmImport,
+  extractImportMappings,
+  extractReExports,
+  loadCppIncludeDirs,
+} from "./import-resolver";
+import { detectFrameworks } from "./frameworks";
+import { synthesizeCallbackEdges } from "./callback-synthesizer";
+import { loadProjectAliases, type AliasMap } from "./path-aliases";
+import { loadGoModule, type GoModule } from "./go-module";
+import { logDebug } from "../errors";
+import type { ReExport } from "./types";
+import { LRUCache } from "./lru-cache";
 
 /**
  * Cache size limits. Each per-resolver cache is bounded so memory
@@ -44,134 +50,535 @@ function resolveCacheLimit(): number {
 }
 
 // Re-export types
-export * from './types';
+export * from "./types";
 
 // Pre-built Sets for O(1) built-in lookups (allocated once, shared across all instances)
 const JS_BUILT_INS = new Set([
-  'console', 'window', 'document', 'global', 'process',
-  'Promise', 'Array', 'Object', 'String', 'Number', 'Boolean',
-  'Date', 'Math', 'JSON', 'RegExp', 'Error', 'Map', 'Set',
-  'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-  'fetch', 'require', 'module', 'exports', '__dirname', '__filename',
+  "console",
+  "window",
+  "document",
+  "global",
+  "process",
+  "Promise",
+  "Array",
+  "Object",
+  "String",
+  "Number",
+  "Boolean",
+  "Date",
+  "Math",
+  "JSON",
+  "RegExp",
+  "Error",
+  "Map",
+  "Set",
+  "setTimeout",
+  "setInterval",
+  "clearTimeout",
+  "clearInterval",
+  "fetch",
+  "require",
+  "module",
+  "exports",
+  "__dirname",
+  "__filename",
 ]);
 
 const REACT_HOOKS = new Set([
-  'useState', 'useEffect', 'useContext', 'useReducer', 'useCallback',
-  'useMemo', 'useRef', 'useLayoutEffect', 'useImperativeHandle', 'useDebugValue',
+  "useState",
+  "useEffect",
+  "useContext",
+  "useReducer",
+  "useCallback",
+  "useMemo",
+  "useRef",
+  "useLayoutEffect",
+  "useImperativeHandle",
+  "useDebugValue",
 ]);
 
 const PYTHON_BUILT_INS = new Set([
-  'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple',
-  'open', 'input', 'type', 'isinstance', 'hasattr', 'getattr', 'setattr',
-  'super', 'self', 'cls', 'None', 'True', 'False',
+  "print",
+  "len",
+  "range",
+  "str",
+  "int",
+  "float",
+  "list",
+  "dict",
+  "set",
+  "tuple",
+  "open",
+  "input",
+  "type",
+  "isinstance",
+  "hasattr",
+  "getattr",
+  "setattr",
+  "super",
+  "self",
+  "cls",
+  "None",
+  "True",
+  "False",
 ]);
 
 const PYTHON_BUILT_IN_TYPES = new Set([
-  'list', 'dict', 'set', 'tuple', 'str', 'int', 'float', 'bool',
-  'bytes', 'bytearray', 'frozenset', 'object', 'super',
+  "list",
+  "dict",
+  "set",
+  "tuple",
+  "str",
+  "int",
+  "float",
+  "bool",
+  "bytes",
+  "bytearray",
+  "frozenset",
+  "object",
+  "super",
 ]);
 
 const PYTHON_BUILT_IN_METHODS = new Set([
-  'append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse', 'copy',
-  'update', 'keys', 'values', 'items', 'get',
-  'add', 'discard', 'union', 'intersection', 'difference',
-  'split', 'join', 'strip', 'lstrip', 'rstrip', 'replace', 'lower', 'upper',
-  'startswith', 'endswith', 'find', 'index', 'count', 'encode', 'decode',
-  'format', 'isdigit', 'isalpha', 'isalnum',
-  'read', 'write', 'readline', 'readlines', 'close', 'flush', 'seek',
+  "append",
+  "extend",
+  "insert",
+  "remove",
+  "pop",
+  "clear",
+  "sort",
+  "reverse",
+  "copy",
+  "update",
+  "keys",
+  "values",
+  "items",
+  "get",
+  "add",
+  "discard",
+  "union",
+  "intersection",
+  "difference",
+  "split",
+  "join",
+  "strip",
+  "lstrip",
+  "rstrip",
+  "replace",
+  "lower",
+  "upper",
+  "startswith",
+  "endswith",
+  "find",
+  "index",
+  "count",
+  "encode",
+  "decode",
+  "format",
+  "isdigit",
+  "isalpha",
+  "isalnum",
+  "read",
+  "write",
+  "readline",
+  "readlines",
+  "close",
+  "flush",
+  "seek",
 ]);
 
 const GO_STDLIB_PACKAGES = new Set([
-  'fmt', 'os', 'io', 'net', 'http', 'log', 'math', 'sort', 'sync',
-  'time', 'path', 'bytes', 'strings', 'strconv', 'errors', 'context',
-  'json', 'xml', 'csv', 'html', 'template', 'regexp', 'reflect',
-  'runtime', 'testing', 'flag', 'bufio', 'crypto', 'encoding',
-  'filepath', 'hash', 'mime', 'rand', 'signal', 'sql', 'syscall',
-  'unicode', 'unsafe', 'atomic', 'binary', 'debug', 'exec', 'heap',
-  'ring', 'scanner', 'tar', 'zip', 'gzip', 'zlib', 'tls', 'url',
-  'user', 'pprof', 'trace', 'ast', 'build', 'parser', 'printer',
-  'token', 'types', 'cgo', 'plugin', 'race', 'ioutil',
+  "fmt",
+  "os",
+  "io",
+  "net",
+  "http",
+  "log",
+  "math",
+  "sort",
+  "sync",
+  "time",
+  "path",
+  "bytes",
+  "strings",
+  "strconv",
+  "errors",
+  "context",
+  "json",
+  "xml",
+  "csv",
+  "html",
+  "template",
+  "regexp",
+  "reflect",
+  "runtime",
+  "testing",
+  "flag",
+  "bufio",
+  "crypto",
+  "encoding",
+  "filepath",
+  "hash",
+  "mime",
+  "rand",
+  "signal",
+  "sql",
+  "syscall",
+  "unicode",
+  "unsafe",
+  "atomic",
+  "binary",
+  "debug",
+  "exec",
+  "heap",
+  "ring",
+  "scanner",
+  "tar",
+  "zip",
+  "gzip",
+  "zlib",
+  "tls",
+  "url",
+  "user",
+  "pprof",
+  "trace",
+  "ast",
+  "build",
+  "parser",
+  "printer",
+  "token",
+  "types",
+  "cgo",
+  "plugin",
+  "race",
+  "ioutil",
   // Kubernetes-common stdlib aliases
-  'utilruntime', 'utilwait', 'utilnet',
+  "utilruntime",
+  "utilwait",
+  "utilnet",
 ]);
 
 const GO_BUILT_INS = new Set([
-  'make', 'new', 'len', 'cap', 'append', 'copy', 'delete', 'close',
-  'panic', 'recover', 'print', 'println', 'complex', 'real', 'imag',
-  'error', 'nil', 'true', 'false', 'iota',
-  'int', 'int8', 'int16', 'int32', 'int64',
-  'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'uintptr',
-  'float32', 'float64', 'complex64', 'complex128',
-  'string', 'bool', 'byte', 'rune', 'any',
+  "make",
+  "new",
+  "len",
+  "cap",
+  "append",
+  "copy",
+  "delete",
+  "close",
+  "panic",
+  "recover",
+  "print",
+  "println",
+  "complex",
+  "real",
+  "imag",
+  "error",
+  "nil",
+  "true",
+  "false",
+  "iota",
+  "int",
+  "int8",
+  "int16",
+  "int32",
+  "int64",
+  "uint",
+  "uint8",
+  "uint16",
+  "uint32",
+  "uint64",
+  "uintptr",
+  "float32",
+  "float64",
+  "complex64",
+  "complex128",
+  "string",
+  "bool",
+  "byte",
+  "rune",
+  "any",
 ]);
 
 const PASCAL_UNIT_PREFIXES = [
-  'System.', 'Winapi.', 'Vcl.', 'Fmx.', 'Data.', 'Datasnap.',
-  'Soap.', 'Xml.', 'Web.', 'REST.', 'FireDAC.', 'IBX.',
-  'IdHTTP', 'IdTCP', 'IdSSL',
+  "System.",
+  "Winapi.",
+  "Vcl.",
+  "Fmx.",
+  "Data.",
+  "Datasnap.",
+  "Soap.",
+  "Xml.",
+  "Web.",
+  "REST.",
+  "FireDAC.",
+  "IBX.",
+  "IdHTTP",
+  "IdTCP",
+  "IdSSL",
 ];
 
 const PASCAL_BUILT_INS = new Set([
-  'System', 'SysUtils', 'Classes', 'Types', 'Variants', 'StrUtils',
-  'Math', 'DateUtils', 'IOUtils', 'Generics.Collections', 'Generics.Defaults',
-  'Rtti', 'TypInfo', 'SyncObjs', 'RegularExpressions',
-  'SysInit', 'Windows', 'Messages', 'Graphics', 'Controls', 'Forms',
-  'Dialogs', 'StdCtrls', 'ExtCtrls', 'ComCtrls', 'Menus', 'ActnList',
-  'WriteLn', 'Write', 'ReadLn', 'Read', 'Inc', 'Dec', 'Ord', 'Chr',
-  'Length', 'SetLength', 'High', 'Low', 'Assigned', 'FreeAndNil',
-  'Format', 'IntToStr', 'StrToInt', 'FloatToStr', 'StrToFloat',
-  'Trim', 'UpperCase', 'LowerCase', 'Pos', 'Copy', 'Delete', 'Insert',
-  'Now', 'Date', 'Time', 'DateToStr', 'StrToDate',
-  'Raise', 'Exit', 'Break', 'Continue', 'Abort',
-  'True', 'False', 'nil', 'Self', 'Result',
-  'Create', 'Destroy', 'Free',
-  'TObject', 'TComponent', 'TPersistent', 'TInterfacedObject',
-  'TList', 'TStringList', 'TStrings', 'TStream', 'TMemoryStream', 'TFileStream',
-  'Exception', 'EAbort', 'EConvertError', 'EAccessViolation',
-  'IInterface', 'IUnknown',
+  "System",
+  "SysUtils",
+  "Classes",
+  "Types",
+  "Variants",
+  "StrUtils",
+  "Math",
+  "DateUtils",
+  "IOUtils",
+  "Generics.Collections",
+  "Generics.Defaults",
+  "Rtti",
+  "TypInfo",
+  "SyncObjs",
+  "RegularExpressions",
+  "SysInit",
+  "Windows",
+  "Messages",
+  "Graphics",
+  "Controls",
+  "Forms",
+  "Dialogs",
+  "StdCtrls",
+  "ExtCtrls",
+  "ComCtrls",
+  "Menus",
+  "ActnList",
+  "WriteLn",
+  "Write",
+  "ReadLn",
+  "Read",
+  "Inc",
+  "Dec",
+  "Ord",
+  "Chr",
+  "Length",
+  "SetLength",
+  "High",
+  "Low",
+  "Assigned",
+  "FreeAndNil",
+  "Format",
+  "IntToStr",
+  "StrToInt",
+  "FloatToStr",
+  "StrToFloat",
+  "Trim",
+  "UpperCase",
+  "LowerCase",
+  "Pos",
+  "Copy",
+  "Delete",
+  "Insert",
+  "Now",
+  "Date",
+  "Time",
+  "DateToStr",
+  "StrToDate",
+  "Raise",
+  "Exit",
+  "Break",
+  "Continue",
+  "Abort",
+  "True",
+  "False",
+  "nil",
+  "Self",
+  "Result",
+  "Create",
+  "Destroy",
+  "Free",
+  "TObject",
+  "TComponent",
+  "TPersistent",
+  "TInterfacedObject",
+  "TList",
+  "TStringList",
+  "TStrings",
+  "TStream",
+  "TMemoryStream",
+  "TFileStream",
+  "Exception",
+  "EAbort",
+  "EConvertError",
+  "EAccessViolation",
+  "IInterface",
+  "IUnknown",
 ]);
 
 const C_BUILT_INS = new Set([
   // Standard C library functions
-  'printf', 'fprintf', 'sprintf', 'snprintf', 'scanf', 'fscanf', 'sscanf',
-  'malloc', 'calloc', 'realloc', 'free',
-  'memcpy', 'memmove', 'memset', 'memcmp', 'memchr',
-  'strlen', 'strcpy', 'strncpy', 'strcat', 'strncat', 'strcmp', 'strncmp',
-  'strstr', 'strchr', 'strrchr', 'strtok', 'strdup',
-  'fopen', 'fclose', 'fread', 'fwrite', 'fgets', 'fputs', 'fputc', 'fgetc',
-  'feof', 'ferror', 'fflush', 'fseek', 'ftell', 'rewind',
-  'exit', 'abort', 'atexit', 'atoi', 'atol', 'atof', 'strtol', 'strtoul', 'strtod',
-  'qsort', 'bsearch',
-  'abs', 'labs', 'rand', 'srand',
-  'sin', 'cos', 'tan', 'sqrt', 'pow', 'log', 'log10', 'exp', 'ceil', 'floor', 'fabs',
-  'time', 'clock', 'difftime', 'mktime', 'localtime', 'gmtime', 'strftime', 'asctime',
-  'assert', 'errno',
-  'perror', 'remove', 'rename', 'tmpfile', 'tmpnam',
-  'getenv', 'system',
-  'signal', 'raise',
-  'setjmp', 'longjmp',
-  'va_start', 'va_end', 'va_arg', 'va_copy',
-  'NULL', 'EOF', 'BUFSIZ', 'FILENAME_MAX', 'RAND_MAX', 'EXIT_SUCCESS', 'EXIT_FAILURE',
-  'size_t', 'ptrdiff_t', 'wchar_t', 'intptr_t', 'uintptr_t',
-  'int8_t', 'int16_t', 'int32_t', 'int64_t',
-  'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t',
-  'FILE',
+  "printf",
+  "fprintf",
+  "sprintf",
+  "snprintf",
+  "scanf",
+  "fscanf",
+  "sscanf",
+  "malloc",
+  "calloc",
+  "realloc",
+  "free",
+  "memcpy",
+  "memmove",
+  "memset",
+  "memcmp",
+  "memchr",
+  "strlen",
+  "strcpy",
+  "strncpy",
+  "strcat",
+  "strncat",
+  "strcmp",
+  "strncmp",
+  "strstr",
+  "strchr",
+  "strrchr",
+  "strtok",
+  "strdup",
+  "fopen",
+  "fclose",
+  "fread",
+  "fwrite",
+  "fgets",
+  "fputs",
+  "fputc",
+  "fgetc",
+  "feof",
+  "ferror",
+  "fflush",
+  "fseek",
+  "ftell",
+  "rewind",
+  "exit",
+  "abort",
+  "atexit",
+  "atoi",
+  "atol",
+  "atof",
+  "strtol",
+  "strtoul",
+  "strtod",
+  "qsort",
+  "bsearch",
+  "abs",
+  "labs",
+  "rand",
+  "srand",
+  "sin",
+  "cos",
+  "tan",
+  "sqrt",
+  "pow",
+  "log",
+  "log10",
+  "exp",
+  "ceil",
+  "floor",
+  "fabs",
+  "time",
+  "clock",
+  "difftime",
+  "mktime",
+  "localtime",
+  "gmtime",
+  "strftime",
+  "asctime",
+  "assert",
+  "errno",
+  "perror",
+  "remove",
+  "rename",
+  "tmpfile",
+  "tmpnam",
+  "getenv",
+  "system",
+  "signal",
+  "raise",
+  "setjmp",
+  "longjmp",
+  "va_start",
+  "va_end",
+  "va_arg",
+  "va_copy",
+  "NULL",
+  "EOF",
+  "BUFSIZ",
+  "FILENAME_MAX",
+  "RAND_MAX",
+  "EXIT_SUCCESS",
+  "EXIT_FAILURE",
+  "size_t",
+  "ptrdiff_t",
+  "wchar_t",
+  "intptr_t",
+  "uintptr_t",
+  "int8_t",
+  "int16_t",
+  "int32_t",
+  "int64_t",
+  "uint8_t",
+  "uint16_t",
+  "uint32_t",
+  "uint64_t",
+  "FILE",
   // POSIX additions commonly seen
-  'stat', 'lstat', 'fstat', 'open', 'close', 'read', 'write', 'pipe',
-  'fork', 'exec', 'waitpid', 'getpid', 'getppid', 'kill', 'sleep', 'usleep',
-  'pthread_create', 'pthread_join', 'pthread_mutex_lock', 'pthread_mutex_unlock',
-  'dlopen', 'dlsym', 'dlclose',
+  "stat",
+  "lstat",
+  "fstat",
+  "open",
+  "close",
+  "read",
+  "write",
+  "pipe",
+  "fork",
+  "exec",
+  "waitpid",
+  "getpid",
+  "getppid",
+  "kill",
+  "sleep",
+  "usleep",
+  "pthread_create",
+  "pthread_join",
+  "pthread_mutex_lock",
+  "pthread_mutex_unlock",
+  "dlopen",
+  "dlsym",
+  "dlclose",
 ]);
 
 const CPP_BUILT_INS = new Set([
   // iostream objects (often used without std:: prefix via using)
-  'cout', 'cin', 'cerr', 'clog', 'endl', 'flush', 'ws',
-  'std', // the namespace itself when used as std::something
+  "cout",
+  "cin",
+  "cerr",
+  "clog",
+  "endl",
+  "flush",
+  "ws",
+  "std", // the namespace itself when used as std::something
   // Common C++ keywords that leak as references
-  'nullptr', 'true', 'false', 'this', 'sizeof', 'alignof', 'typeid',
-  'static_cast', 'dynamic_cast', 'reinterpret_cast', 'const_cast',
-  'make_unique', 'make_shared', 'make_pair',
-  'move', 'forward', 'swap',
+  "nullptr",
+  "true",
+  "false",
+  "this",
+  "sizeof",
+  "alignof",
+  "typeid",
+  "static_cast",
+  "dynamic_cast",
+  "reinterpret_cast",
+  "const_cast",
+  "make_unique",
+  "make_shared",
+  "make_pair",
+  "move",
+  "forward",
+  "swap",
 ]);
 
 /**
@@ -322,15 +729,18 @@ export class ReferenceResolver {
         return result;
       },
 
-      getNodesByKind: (kind: Node['kind']) => {
+      getNodesByKind: (kind: Node["kind"]) => {
         return this.queries.getNodesByKind(kind);
       },
 
       fileExists: (filePath: string) => {
         // Check pre-built known files set first (O(1))
         if (this.knownFiles) {
-          const normalized = filePath.replace(/\\/g, '/');
-          if (this.knownFiles.has(filePath) || this.knownFiles.has(normalized)) {
+          const normalized = filePath.replace(/\\/g, "/");
+          if (
+            this.knownFiles.has(filePath) ||
+            this.knownFiles.has(normalized)
+          ) {
             return true;
           }
         }
@@ -339,7 +749,10 @@ export class ReferenceResolver {
         try {
           return fs.existsSync(fullPath);
         } catch (error) {
-          logDebug('Error checking file existence', { filePath, error: String(error) });
+          logDebug("Error checking file existence", {
+            filePath,
+            error: String(error),
+          });
           return false;
         }
       },
@@ -351,11 +764,14 @@ export class ReferenceResolver {
 
         const fullPath = path.join(this.projectRoot, filePath);
         try {
-          const content = fs.readFileSync(fullPath, 'utf-8');
+          const content = fs.readFileSync(fullPath, "utf-8");
           this.fileCache.set(filePath, content);
           return content;
         } catch (error) {
-          logDebug('Failed to read file for resolution', { filePath, error: String(error) });
+          logDebug("Failed to read file for resolution", {
+            filePath,
+            error: String(error),
+          });
           this.fileCache.set(filePath, null);
           return null;
         }
@@ -368,16 +784,17 @@ export class ReferenceResolver {
       },
 
       listDirectories: (relativePath: string) => {
-        const target = relativePath === '.' || relativePath === ''
-          ? this.projectRoot
-          : path.join(this.projectRoot, relativePath);
+        const target =
+          relativePath === "." || relativePath === ""
+            ? this.projectRoot
+            : path.join(this.projectRoot, relativePath);
         try {
           return fs
             .readdirSync(target, { withFileTypes: true })
             .filter((entry) => entry.isDirectory())
             .map((entry) => entry.name);
         } catch (error) {
-          logDebug('Failed to list directory for resolution', {
+          logDebug("Failed to list directory for resolution", {
             relativePath,
             error: String(error),
           });
@@ -447,7 +864,7 @@ export class ReferenceResolver {
    */
   resolveAll(
     unresolvedRefs: UnresolvedReference[],
-    onProgress?: (current: number, total: number) => void
+    onProgress?: (current: number, total: number) => void,
   ): ResolutionResult {
     // Pre-load all nodes into memory for fast lookups
     this.warmCaches();
@@ -520,32 +937,34 @@ export class ReferenceResolver {
     if (this.knownNames.has(name)) return true;
 
     // For qualified names like "obj.method" or "Class::method", check the parts
-    const dotIdx = name.indexOf('.');
+    const dotIdx = name.indexOf(".");
     if (dotIdx > 0) {
       const receiver = name.substring(0, dotIdx);
       const member = name.substring(dotIdx + 1);
-      if (this.knownNames.has(receiver) || this.knownNames.has(member)) return true;
+      if (this.knownNames.has(receiver) || this.knownNames.has(member))
+        return true;
       // Also check capitalized receiver (instance-method resolution)
       const capitalized = receiver.charAt(0).toUpperCase() + receiver.slice(1);
       if (this.knownNames.has(capitalized)) return true;
       // JVM FQN: `com.example.foo.Bar` — the only useful segment is the
       // last one (`Bar`); the earlier check finds `example.foo.Bar` which
       // never matches a node name.
-      const lastDot = name.lastIndexOf('.');
+      const lastDot = name.lastIndexOf(".");
       if (lastDot > dotIdx) {
         const tail = name.substring(lastDot + 1);
         if (tail && this.knownNames.has(tail)) return true;
       }
     }
-    const colonIdx = name.indexOf('::');
+    const colonIdx = name.indexOf("::");
     if (colonIdx > 0) {
       const receiver = name.substring(0, colonIdx);
       const member = name.substring(colonIdx + 2);
-      if (this.knownNames.has(receiver) || this.knownNames.has(member)) return true;
+      if (this.knownNames.has(receiver) || this.knownNames.has(member))
+        return true;
     }
 
     // For path-like references (e.g., "snippets/drawer-menu.liquid"), check the filename
-    const slashIdx = name.lastIndexOf('/');
+    const slashIdx = name.lastIndexOf("/");
     if (slashIdx > 0) {
       const fileName = name.substring(slashIdx + 1);
       if (this.knownNames.has(fileName)) return true;
@@ -565,7 +984,7 @@ export class ReferenceResolver {
     for (const imp of imports) {
       if (
         imp.localName === ref.referenceName ||
-        ref.referenceName.startsWith(imp.localName + '.')
+        ref.referenceName.startsWith(imp.localName + ".")
       ) {
         return true;
       }
@@ -576,6 +995,7 @@ export class ReferenceResolver {
   /**
    * Resolve a single reference
    */
+  // 给我一个名字，我帮你找到它真正指向的代码定义
   resolveOne(ref: UnresolvedRef): ResolvedRef | null {
     // Skip built-in/external references
     if (this.isBuiltInOrExternal(ref)) {
@@ -630,7 +1050,7 @@ export class ReferenceResolver {
 
     // Return highest confidence candidate
     return candidates.reduce((best, curr) =>
-      curr.confidence > best.confidence ? curr : best
+      curr.confidence > best.confidence ? curr : best,
     );
   }
 
@@ -642,12 +1062,19 @@ export class ReferenceResolver {
       let kind = ref.original.referenceKind;
 
       // Promote "extends" to "implements" when a class/struct targets an interface
-      if (kind === 'extends') {
+      if (kind === "extends") {
         const targetNode = this.queries.getNodeById(ref.targetNodeId);
-        if (targetNode && (targetNode.kind === 'interface' || targetNode.kind === 'protocol')) {
+        if (
+          targetNode &&
+          (targetNode.kind === "interface" || targetNode.kind === "protocol")
+        ) {
           const sourceNode = this.queries.getNodeById(ref.original.fromNodeId);
-          if (sourceNode && sourceNode.kind !== 'interface' && sourceNode.kind !== 'protocol') {
-            kind = 'implements';
+          if (
+            sourceNode &&
+            sourceNode.kind !== "interface" &&
+            sourceNode.kind !== "protocol"
+          ) {
+            kind = "implements";
           }
         }
       }
@@ -657,10 +1084,13 @@ export class ReferenceResolver {
       // express instantiation as `Foo()` — extraction can't tell that
       // apart from a function call without symbol info, but resolution
       // can: if `Foo` resolves to a class, the call IS an instantiation.
-      if (kind === 'calls') {
+      if (kind === "calls") {
         const targetNode = this.queries.getNodeById(ref.targetNodeId);
-        if (targetNode && (targetNode.kind === 'class' || targetNode.kind === 'struct')) {
-          kind = 'instantiates';
+        if (
+          targetNode &&
+          (targetNode.kind === "class" || targetNode.kind === "struct")
+        ) {
+          kind = "instantiates";
         }
       }
 
@@ -683,7 +1113,7 @@ export class ReferenceResolver {
    */
   resolveAndPersist(
     unresolvedRefs: UnresolvedReference[],
-    onProgress?: (current: number, total: number) => void
+    onProgress?: (current: number, total: number) => void,
   ): ResolutionResult {
     const result = this.resolveAll(unresolvedRefs, onProgress);
 
@@ -702,7 +1132,7 @@ export class ReferenceResolver {
           fromNodeId: r.original.fromNodeId,
           referenceName: r.original.referenceName,
           referenceKind: r.original.referenceKind,
-        }))
+        })),
       );
     }
 
@@ -716,7 +1146,7 @@ export class ReferenceResolver {
    */
   async resolveAndPersistBatched(
     onProgress?: (current: number, total: number) => void,
-    batchSize: number = 5000
+    batchSize: number = 5000,
   ): Promise<ResolutionResult> {
     this.warmCaches();
 
@@ -750,7 +1180,7 @@ export class ReferenceResolver {
             fromNodeId: r.original.fromNodeId,
             referenceName: r.original.referenceName,
             referenceKind: r.original.referenceKind,
-          }))
+          })),
         );
       }
 
@@ -761,7 +1191,7 @@ export class ReferenceResolver {
             fromNodeId: r.fromNodeId,
             referenceName: r.referenceName,
             referenceKind: r.referenceKind,
-          }))
+          })),
         );
       }
 
@@ -770,18 +1200,22 @@ export class ReferenceResolver {
       aggregateStats.resolved += result.stats.resolved;
       aggregateStats.unresolved += result.stats.unresolved;
       for (const [method, count] of Object.entries(result.stats.byMethod)) {
-        aggregateStats.byMethod[method] = (aggregateStats.byMethod[method] || 0) + count;
+        aggregateStats.byMethod[method] =
+          (aggregateStats.byMethod[method] || 0) + count;
       }
 
       processed += batch.length;
       onProgress?.(processed, total);
 
       // Yield so progress UI can render between batches
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // If nothing was resolved or removed in this batch, we'd loop forever
       // on the same rows. Break to avoid infinite loop.
-      if (result.resolved.length === 0 && result.unresolved.length === batch.length) {
+      if (
+        result.resolved.length === 0 &&
+        result.unresolved.length === batch.length
+      ) {
         break;
       }
     }
@@ -791,7 +1225,10 @@ export class ReferenceResolver {
     // callbacks) that static parsing leaves out. Best-effort — never fail the
     // index on it. See docs/design/callback-edge-synthesis.md.
     try {
-      aggregateStats.byMethod['callback-synthesis'] = synthesizeCallbackEdges(this.queries, this.context);
+      aggregateStats.byMethod["callback-synthesis"] = synthesizeCallbackEdges(
+        this.queries,
+        this.context,
+      );
     } catch {
       // synthesis is additive and optional; ignore failures
     }
@@ -815,8 +1252,11 @@ export class ReferenceResolver {
    */
   private isBuiltInOrExternal(ref: UnresolvedRef): boolean {
     const name = ref.referenceName;
-    const isJsTs = ref.language === 'typescript' || ref.language === 'javascript'
-      || ref.language === 'tsx' || ref.language === 'jsx';
+    const isJsTs =
+      ref.language === "typescript" ||
+      ref.language === "javascript" ||
+      ref.language === "tsx" ||
+      ref.language === "jsx";
 
     // JavaScript/TypeScript built-ins
     if (isJsTs && JS_BUILT_INS.has(name)) {
@@ -824,7 +1264,12 @@ export class ReferenceResolver {
     }
 
     // Common JS/TS library calls (console.log, Math.floor, JSON.parse)
-    if (isJsTs && (name.startsWith('console.') || name.startsWith('Math.') || name.startsWith('JSON.'))) {
+    if (
+      isJsTs &&
+      (name.startsWith("console.") ||
+        name.startsWith("Math.") ||
+        name.startsWith("JSON."))
+    ) {
       return true;
     }
 
@@ -834,13 +1279,13 @@ export class ReferenceResolver {
     }
 
     // Python built-ins (bare calls only — dotted calls like console.print are method calls)
-    if (ref.language === 'python' && PYTHON_BUILT_INS.has(name)) {
+    if (ref.language === "python" && PYTHON_BUILT_INS.has(name)) {
       return true;
     }
 
     // Python built-in method calls (e.g., list.extend, dict.update)
-    if (ref.language === 'python') {
-      const dotIdx = name.indexOf('.');
+    if (ref.language === "python") {
+      const dotIdx = name.indexOf(".");
       if (dotIdx > 0) {
         const receiver = name.substring(0, dotIdx);
         const method = name.substring(dotIdx + 1);
@@ -852,7 +1297,8 @@ export class ReferenceResolver {
         // (e.g., items.append where items is a local list variable)
         // But allow if the capitalized receiver matches a known codebase class
         if (PYTHON_BUILT_IN_METHODS.has(method)) {
-          const capitalized = receiver.charAt(0).toUpperCase() + receiver.slice(1);
+          const capitalized =
+            receiver.charAt(0).toUpperCase() + receiver.slice(1);
           if (!this.knownNames?.has(capitalized)) {
             return true;
           }
@@ -870,8 +1316,8 @@ export class ReferenceResolver {
     }
 
     // Go standard library packages — refs like "fmt.Println", "http.ListenAndServe", etc.
-    if (ref.language === 'go') {
-      const dotIdx = name.indexOf('.');
+    if (ref.language === "go") {
+      const dotIdx = name.indexOf(".");
       if (dotIdx > 0) {
         const pkg = name.substring(0, dotIdx);
         if (GO_STDLIB_PACKAGES.has(pkg)) {
@@ -884,7 +1330,7 @@ export class ReferenceResolver {
     }
 
     // Pascal/Delphi built-ins and standard library units
-    if (ref.language === 'pascal') {
+    if (ref.language === "pascal") {
       if (PASCAL_UNIT_PREFIXES.some((p) => name.startsWith(p))) {
         return true;
       }
@@ -901,11 +1347,11 @@ export class ReferenceResolver {
     // those resolutions makes the graph wrong, not cleaner. We only filter
     // when there's no user node with this name — then name-matching would
     // produce zero edges anyway and the filter just short-circuits work.
-    if (ref.language === 'c' || ref.language === 'cpp') {
+    if (ref.language === "c" || ref.language === "cpp") {
       // C++ std:: namespace prefix — safe to filter unconditionally,
       // since `std::foo` is never a user-defined qualified name in
       // tree-sitter output.
-      if (name.startsWith('std::')) return true;
+      if (name.startsWith("std::")) return true;
       if (C_BUILT_INS.has(name) || CPP_BUILT_INS.has(name)) {
         return !this.hasAnyPossibleMatch(name);
       }
@@ -919,22 +1365,25 @@ export class ReferenceResolver {
    */
   private getFilePathFromNodeId(nodeId: string): string {
     const node = this.queries.getNodeById(nodeId);
-    return node?.filePath || '';
+    return node?.filePath || "";
   }
 
   /**
    * Get language from node ID
    */
-  private getLanguageFromNodeId(nodeId: string): UnresolvedRef['language'] {
+  private getLanguageFromNodeId(nodeId: string): UnresolvedRef["language"] {
     const node = this.queries.getNodeById(nodeId);
-    return node?.language || 'unknown';
+    return node?.language || "unknown";
   }
 }
 
 /**
  * Create a reference resolver instance
  */
-export function createResolver(projectRoot: string, queries: QueryBuilder): ReferenceResolver {
+export function createResolver(
+  projectRoot: string,
+  queries: QueryBuilder,
+): ReferenceResolver {
   const resolver = new ReferenceResolver(projectRoot, queries);
   resolver.initialize();
   return resolver;

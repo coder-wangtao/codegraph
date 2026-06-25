@@ -728,7 +728,6 @@ export class ExtractionOrchestrator {
         currentFile: file,
       });
     });
-
     // Detect frameworks once per indexAll run using the scanned file list.
     // Names are passed to each parse call so framework-specific extractors
     // (route nodes, middleware, etc.) run after the tree-sitter pass.
@@ -1084,6 +1083,7 @@ export class ExtractionOrchestrator {
         // Store in database on main thread (SQLite is not thread-safe)
         if (result.nodes.length > 0 || result.errors.length === 0) {
           const language = detectLanguage(filePath, content);
+          // TODO: 存库
           this.storeExtractionResult(
             filePath,
             content,

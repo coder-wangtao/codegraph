@@ -412,7 +412,7 @@ export class CodeGraph {
             current: 0,
             total: unresolvedCount,
           });
-
+          // 不断从数据库取未解析引用 → 解析 → 写入图关系 → 删除旧数据 → 直到完成，
           await this.resolveReferencesBatched((current, total) => {
             options.onProgress?.({
               phase: "resolving",
