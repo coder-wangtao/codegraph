@@ -1699,13 +1699,26 @@ export class ExtractionOrchestrator {
    * Get files that have changed since last index.
    * Uses git status as a fast path when available, falling back to full scan.
    */
+  // 检测当前项目中相对于索引数据库（DB）的文件变化
   getChangedFiles(): {
     added: string[];
     modified: string[];
     removed: string[];
   } {
+    // 优先使用 Git（速度快）
     const gitChanges = getGitChangedFiles(this.rootDir);
-
+    // gitChange返回的是：
+    // {
+    //   modified: [
+    //       "src/a.ts"
+    //   ],
+    //   deleted: [
+    //       "src/b.ts"
+    //   ],
+    //   added: [
+    //       "src/c.ts"
+    //   ]
+    // }
     if (gitChanges) {
       // === Git fast path ===
       const added: string[] = [];
@@ -1714,6 +1727,7 @@ export class ExtractionOrchestrator {
 
       // Deleted files — only report if tracked in DB
       for (const filePath of gitChanges.deleted) {
+        // 处理删除文件
         const tracked = this.queries.getFileByPath(filePath);
         if (tracked) {
           removed.push(filePath);
@@ -1741,8 +1755,10 @@ export class ExtractionOrchestrator {
         const tracked = this.queries.getFileByPath(filePath);
 
         if (!tracked) {
+          // 数据库没有：这是第一次出现,相当于ADD
           added.push(filePath);
         } else if (tracked.contentHash !== contentHash) {
+          // 如果数据库有：相当于修改
           modified.push(filePath);
         }
       }

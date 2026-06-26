@@ -323,7 +323,7 @@ export class CodeGraph {
 
     return new CodeGraph(db, queries, resolvedRoot);
   }
-
+ 
   /**
    * Check if a directory has been initialized as a CodeGraph project
    */
@@ -333,6 +333,7 @@ export class CodeGraph {
 
   /**
    * Close the CodeGraph instance and release resources
+   *
    */
   close(): void {
     this.unwatch();

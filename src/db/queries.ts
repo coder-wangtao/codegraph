@@ -1071,7 +1071,14 @@ export class QueryBuilder {
     // Fetch 5x requested limit so post-hoc rescoring (kindBonus, pathRelevance,
     // nameMatchBonus) can promote results that BM25 alone undervalues.
     const ftsLimit = Math.max(limit * 5, 100);
-
+    // BM25 查询算法
+    // 这组参数对应 FTS 表的列权重（按列顺序）：
+    // 列	权重
+    // id	0
+    // name	20
+    // qualified_name	5
+    // docstring	1
+    // signature	2
     let sql = `
       SELECT nodes.*, bm25(nodes_fts, 0, 20, 5, 1, 2) as score
       FROM nodes_fts

@@ -270,11 +270,11 @@ export class GraphTraverser {
     result: Array<{ node: Node; edge: Edge }>,
     visited: Set<string>,
   ): void {
+    debugger;
     if (currentDepth >= maxDepth || visited.has(nodeId)) {
       return;
     }
     visited.add(nodeId);
-
     const incomingEdges = this.queries.getIncomingEdges(nodeId, [
       "calls",
       "references",
@@ -332,7 +332,7 @@ export class GraphTraverser {
       return;
     }
     visited.add(nodeId);
-
+    debugger;
     const outgoingEdges = this.queries.getOutgoingEdges(nodeId, [
       "calls",
       "references",
@@ -526,6 +526,7 @@ export class GraphTraverser {
    * @returns Subgraph containing potentially impacted nodes
    */
   getImpactRadius(nodeId: string, maxDepth: number = 3): Subgraph {
+    debugger;
     const focalNode = this.queries.getNodeById(nodeId);
     if (!focalNode) {
       return { nodes: new Map(), edges: [], roots: [] };
@@ -609,6 +610,7 @@ export class GraphTraverser {
     // 找“谁依赖我”
     const incomingEdges = this.queries.getIncomingEdges(nodeId);
     if (incomingEdges.length === 0) return;
+    debugger;
     const sources = this.queries.getNodesByIds(
       incomingEdges.map((e) => e.source),
     );

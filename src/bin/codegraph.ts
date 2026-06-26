@@ -574,7 +574,6 @@ function main() {
     .action(
       async (pathArg: string | undefined, options: { force?: boolean }) => {
         const projectPath = resolveProjectPath(pathArg);
-
         try {
           if (!isInitialized(projectPath)) {
             warn(`CodeGraph is not initialized in ${projectPath}`);
@@ -648,7 +647,6 @@ function main() {
         options: { force?: boolean; quiet?: boolean; verbose?: boolean },
       ) => {
         const projectPath = resolveProjectPath(pathArg);
-
         try {
           if (!isInitialized(projectPath)) {
             error(`CodeGraph not initialized in ${projectPath}`);
@@ -1217,7 +1215,9 @@ function main() {
       children: Map<string, TreeNode>;
       file?: { language: string; nodeCount: number };
     }
-
+    // 初始状态：
+    // root
+    // └ children = {}
     const root: TreeNode = { name: "", children: new Map() };
 
     for (const file of files) {
@@ -1250,7 +1250,6 @@ function main() {
       const glyphs = getGlyphs();
       const connector = isLast ? glyphs.treeLast : glyphs.treeBranch;
       const childPrefix = isLast ? "    " : glyphs.treePipe;
-
       if (node.name) {
         let line = prefix + connector + node.name;
         if (node.file && includeMetadata) {
@@ -1510,7 +1509,6 @@ function main() {
             cg.destroy();
             return;
           }
-
           const seen = new Set<string>();
           const allCallers: Array<{
             name: string;
@@ -1612,6 +1610,7 @@ function main() {
           const limit = parseInt(options.limit || "20", 10);
 
           const matches = cg.searchNodes(symbol, { limit: 50 });
+          debugger;
           if (matches.length === 0) {
             info(`Symbol "${symbol}" not found`);
             cg.destroy();
@@ -1722,6 +1721,7 @@ function main() {
           );
 
           const matches = cg.searchNodes(symbol, { limit: 50 });
+
           if (matches.length === 0) {
             info(`Symbol "${symbol}" not found`);
             cg.destroy();
@@ -1846,7 +1846,7 @@ function main() {
    */
   // 给定“变更的源文件”，找出“可能受影响的测试文件”。
   // 输入affected src/a.ts src/b.ts 输出tests/a.test.ts e2e/login.spec.ts
-  //TODO: OK
+  //TODO: 结束
   program
     .command("affected [files...]")
     .description("Find test files affected by changed source files")
