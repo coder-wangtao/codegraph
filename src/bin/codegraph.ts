@@ -1357,7 +1357,6 @@ function main() {
         const projectPath = options.path
           ? resolveProjectPath(options.path)
           : undefined;
-
         // Commander sets watch=false when --no-watch is passed. Route it through
         // the same env-var chokepoint the watcher and MCP server already honor.
         if (options.watch === false) {

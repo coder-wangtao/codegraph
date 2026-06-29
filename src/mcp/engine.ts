@@ -193,6 +193,7 @@ export class MCPEngine {
     const disabledReason = watchDisabledReason(
       this.projectPath ?? process.cwd(),
     );
+
     if (disabledReason) {
       process.stderr.write(
         `[CodeGraph MCP] File watcher disabled — ${disabledReason}. ` +
@@ -210,6 +211,7 @@ export class MCPEngine {
     const debounceMs = parseDebounceEnv(
       process.env.CODEGRAPH_WATCH_DEBOUNCE_MS,
     );
+
     if (debounceMs !== undefined) {
       process.stderr.write(
         `[CodeGraph MCP] File watcher debounce: ${debounceMs}ms (CODEGRAPH_WATCH_DEBOUNCE_MS)\n`,

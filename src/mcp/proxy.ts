@@ -63,7 +63,7 @@ export async function runProxy(
   if (process.platform !== "win32" && !fs.existsSync(socketPath)) {
     return { outcome: "fallback-needed", reason: "socket file missing" };
   }
-
+  // client ---> /tmp/daemon.sock ---> daemon
   const socket = net.createConnection(socketPath);
   socket.setEncoding("utf8");
 
@@ -185,6 +185,7 @@ function pipeUntilClose(socket: net.Socket): Promise<void> {
       }
     };
 
+    // 输入方向：stdin → daemon
     process.stdin.on("data", (chunk) => {
       try {
         socket.write(chunk);
@@ -209,6 +210,7 @@ function pipeUntilClose(socket: net.Socket): Promise<void> {
       done();
     });
 
+    // 输出方向：daemon → stdout
     socket.on("data", (chunk) => {
       try {
         process.stdout.write(chunk);

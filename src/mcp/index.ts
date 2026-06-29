@@ -255,25 +255,25 @@ export class MCPServer {
     // daemon honors the same env it was spawned with (it never sets NO_DAEMON).
     if (daemonInternalSet()) {
       //启动 daemon 进程服务
-      return this.startDaemonProcess();
+      return this.startDaemonProcess(); // → Daemon
     }
 
     // Direct mode if the user opted out. Setting the env var is sufficient to
     // get the pre-#411 single-process behavior.
     if (daemonOptOutSet()) {
       // 单进程 MCP
-      return this.startDirect("CODEGRAPH_NO_DAEMON set");
+      return this.startDirect("CODEGRAPH_NO_DAEMON set"); // → Direct
     }
 
     const root = resolveDaemonRoot(this.projectPath);
     if (!root) {
       // No initialized project found — daemon mode has nowhere to put its
       // socket. The fresh-checkout / outside-project case; behave as before.
-      return this.startDirect("no .codegraph/ root found");
+      return this.startDirect("no .codegraph/ root found"); // → Direct
     }
 
     try {
-      const mode = await this.connectOrSpawnDaemon(root);
+      const mode = await this.connectOrSpawnDaemon(root); // Proxy（stdio↔socket 代理）
       if (mode === "fallback") {
         return this.startDirect("daemon unavailable; fallback to direct");
       }
@@ -407,6 +407,7 @@ export class MCPServer {
   private async connectOrSpawnDaemon(
     root: string,
   ): Promise<"proxy" | "fallback"> {
+    // 根据 root 生成 daemon 的 Unix socket / IPC 地址 /tmp/myapp-daemon.sock
     const socketPath = getDaemonSocketPath(root);
 
     // Fast path: a daemon may already be listening. On success runProxy pipes
